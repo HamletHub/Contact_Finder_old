@@ -429,7 +429,7 @@ Public Class FWorkSpace
     Private Function GetTownFromAddress(ByVal Address As String)
         'Get town from the full address
         If Address.ToLower.Contains("danbury, ct") Then Return "Danbury"
-        If Address.ToLower.Contains("darien, ct") Then Return "Darien"
+        If Address.ToLower.Contains("fairfield, ct") Then Return "Fairfield"
         If Address.ToLower.Contains("milford, ct") Then Return "Milford"
         If Address.ToLower.Contains("new canaan, ct") Then Return "New canaan"
         If Address.ToLower.Contains("newtown, ct") Then Return "Newtown"

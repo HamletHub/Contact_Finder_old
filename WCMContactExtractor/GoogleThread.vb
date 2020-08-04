@@ -139,7 +139,7 @@ Public Class GoogleThread
         element.SendKeys(link) 'Send keyword
         Thread.Sleep(500) 'Wait for a moment
         element.SendKeys(Keys.Enter) 'Press enter
-        SaveLog("Google thread - keyword entered")
+        SaveLog("Google thread - Keyword entered")
 
         Dim NoMorePages As Boolean = False 'Variable to determine when there are no more pages
 
@@ -314,16 +314,18 @@ Public Class GoogleThread
                         BusinessName = BusinessName.Replace("&amp;", "&") 'Format contact name
                         If BusinessAddress = "False" Then BusinessAddress = "" 'Format address
                         If BusinessPhone = "False" Then BusinessPhone = "" 'Format phone
-
-                        If ShouldSaveEntry = True Then 'If we can save this contact...
-                            If IsTownOnTheList(BusinessAddress) = True Then SaveIntoDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") Else SaveIntoOTDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") 'Save into adequate database (this splits contacts from towns we're working on from others into different SQL tables)
-                        Else
-                            SaveLog("Google thread - Blacklisting: " & BusinessName & " and " & BusinessWebsite)
-                            BlackListEntry(BusinessName, BusinessWebsite) 'If we can't save this contact for any reason, add this contact to duplicate tables
-                        End If
+                    Else
+                        SaveLog("Google thread - element xPath: //*[@id='pane']/div/div[1]/div/div/button/span not found")
                     End If
                 Else
                     SaveLog("Google thread - Duplicate contact: " & BusinessName)
+                End If
+
+                If ShouldSaveEntry = True Then 'If we can save this contact...
+                    If IsTownOnTheList(BusinessAddress) = True Then SaveIntoDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") Else SaveIntoOTDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") 'Save into adequate database (this splits contacts from towns we're working on from others into different SQL tables)
+                Else
+                    SaveLog("Google thread - Blacklisting: " & BusinessName & " and " & BusinessWebsite)
+                    BlackListEntry(BusinessName, BusinessWebsite) 'If we can't save this contact for any reason, add this contact to duplicate tables
                 End If
             Next
 
@@ -521,7 +523,7 @@ Public Class GoogleThread
     Private Function IsTownOnTheList(ByVal s)
         'Add town list
         CityarrayNew.Add("Danbury,")
-        CityarrayNew.Add("Darien,")
+        CityarrayNew.Add("Fairfield,")
         CityarrayNew.Add("Milford,")
         CityarrayNew.Add("New Canaan,")
         CityarrayNew.Add("Newtown,")
@@ -540,7 +542,7 @@ Public Class GoogleThread
         'Check if town is on the list
         Dim CityarrayNew2 As New ArrayList From {
             "danbury",
-            "darien",
+            "fairfield",
             "milford",
             "new canaan",
             "newtown",
@@ -709,8 +711,6 @@ Public Class GoogleThread
 
         Return BusinessWebsite 'Return formated string
     End Function
-
-
 #End Region
 
 End Class
