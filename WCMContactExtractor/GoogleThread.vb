@@ -22,7 +22,7 @@ Public Class GoogleThread
         optionOn.AddArgument("start-maximized") 'Instruct Chrome to run in maximized mode
         optionOn.AddArgument("--disable-infobars") 'Disable infobars
         optionOn.AddArgument("--lang=en-GB") 'Set default language to English
-        'optionOn.AddArguments("headless") 'Hide Chrome browser from the user. Headless mode means Chrome will run in the background
+        optionOn.AddArguments("headless") 'Hide Chrome browser from the user. Headless mode means Chrome will run in the background
         optionOn.AddUserProfilePreference("profile.default_content_setting_values.images", 2) 'Disable or enable images
         optionOn.AddArgument("--blink-settings=imagesEnabled=false") 'Disable or enable images
 
