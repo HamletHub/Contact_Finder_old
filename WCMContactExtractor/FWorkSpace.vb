@@ -6,42 +6,24 @@ Imports OpenQA.Selenium.Remote
 Imports OpenQA.Selenium.Support.UI
 
 Public Class FWorkSpace
-    'SETUP
     Public driver As IWebDriver 'Chrome webdriver initialization
     Public driver2 As IWebDriver 'Chrome webdriver initialization for finding emails in the background
     Dim FilterKeywords As New ListBox 'List of email strings to ignore
     ReadOnly sql As New SQLiteControl() 'SQL initialization
     Public GoogleThread As New GoogleThread 'Initialization of the Google Thread which finds new contacts
-
     Public QuitGoogleThread As Boolean = False 'Boolean to quit Google thread (ex. when user quits the application)
-    'SETUP
 
-    'AUTO EMAIL SEARCH
-    Dim Email1Entered As Boolean = False
-    Dim Email2Entered As Boolean = False
-    Dim Email1TEXT As String = ""
-    Dim Email2TEXT As String = ""
+    Dim Email1Entered As Boolean = False, Email2Entered As Boolean = False
+    Dim Email1TEXT As String = "", Email2TEXT As String = ""
 
     Dim EmailThread As Thread 'Initialization of background thread that looks for emails
 
-    Dim BusinessEmail As String
-    Dim NewBusinessEmail As String
-    Dim BwReportProgres As String = ""
-    Dim NewBwReportProgres As String = ""
-    Dim CurrentTID As Integer 'Current SQL row ID
-    'AUTO EMAIL SEARCH
+    Dim BusinessEmail As String, NewBusinessEmail As String
+    Dim BwReportProgres As String = "", NewBwReportProgres As String = ""
 
-    'CONTACT DETAILS
-    Dim ContactName As String
-    Dim ContactNameForEmail As String
-    Dim ContactPhone As String
-    Dim ContactAddress As String
-    Dim ContactWebsite As String
-    Dim ContactTwitter As String
-    Dim ContactInstagram As String
-    Dim ContactFacebook As String
-    Dim ContactLinkedIn As String
-    'CONTACT DETAILS
+    Dim CurrentTID As Integer 'Current SQL row ID
+
+    Dim ContactName As String, ContactNameForEmail As String, ContactPhone As String, ContactAddress As String, ContactWebsite As String, ContactTwitter As String, ContactInstagram As String, ContactFacebook As String, ContactLinkedIn As String 'Contact details
 
     Private Sub FWorkSpace_Load(sender As Object, e As EventArgs) Handles MyBase.Load
         InitializeChromeOptions() 'Initialize all Chrome instances

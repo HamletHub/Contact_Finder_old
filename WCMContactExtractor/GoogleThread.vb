@@ -1,4 +1,6 @@
 ﻿Imports System.ComponentModel
+Imports System.IO
+Imports System.Text
 Imports System.Text.RegularExpressions
 Imports System.Threading
 Imports OpenQA.Selenium
@@ -6,15 +8,32 @@ Imports OpenQA.Selenium.Chrome
 Public Class GoogleThread
     Private WithEvents BWorker As BackgroundWorker 'Declaring Background worker
     Public ThreadWorking As Boolean = False 'Declaring Thread boolean to know when thread is working
-    Public ThreadInfo As String 'Thread info string
     Public driver2 As IWebDriver 'Chrome WebDriver
     ReadOnly sql As New SQLiteControl() 'Declare SQL variable
 
     Dim CityarrayNew As New ArrayList 'City array list
 
+    Dim CurrentLogPath As String
+
     Public Sub InitializeGoogleThread()
+        Dim theContDir As String = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) 'Specify MyDocuments folder for WCM Logs
+        Dim newDir As String = "WCM Logs" 'Folder name
+        Dim thePath As String = IO.Path.Combine(theContDir, newDir) 'Combine MyDocuments with folder name
+        If Not Directory.Exists(thePath) Then Directory.CreateDirectory(thePath) 'Create directory if it does not exists
+
+        Dim localDate = DateTime.Now
+        CurrentLogPath = thePath & "Log:" & localDate & ".txt"
+
+        Dim fs As FileStream = File.Create(CurrentLogPath) ' Create or overwrite the file.
+
+        Dim info As Byte() = New UTF8Encoding(True).GetBytes("Google Thread session - " & localDate & Environment.NewLine) ' Add text to the file.
+        fs.Write(info, 0, info.Length)
+        fs.Close()
+
         ThreadWorking = True 'Set this to true to inform the app this thread is working
-        ThreadInfo = "Initializing thread..." 'Inform user that thread is working
+
+        SaveLog("Setup - Initializing Chrome instance")
+
         Dim driverService2 = ChromeDriverService.CreateDefaultService()
         driverService2.HideCommandPromptWindow = True  'Hide command prompt from user
         Dim optionOn As New ChromeOptions
@@ -28,6 +47,8 @@ Public Class GoogleThread
 
         driver2 = New ChromeDriver(driverService2, optionOn) 'Initialize ChromeDriver with added arguments
 
+        SaveLog("Setup - Successfully Initialized Chrome instance")
+
         Dim element As IWebElement ' Declare Chrome iWebElement
 
         driver2.Navigate.GoToUrl("https://google.com") 'Navigate browser to Google homepage
@@ -35,24 +56,27 @@ Public Class GoogleThread
         Try
             element = driver2.FindElement(By.LinkText("English")) 'Find "English" button and click on it (to set default Google language)
             element.Click() 'Click on that button
+            SaveLog("Setup - Google changed to English language")
         Catch ex As Exception
         End Try
 
+        SaveLog("Setup - Initializing Background worker")
         BWorker = New BackgroundWorker 'Initializing a new instance of Background worker
         BWorker.RunWorkerAsync() 'Run previously initialized background worker
     End Sub
     Private Sub BwRunSelenium_DoWork(ByVal sender As Object, ByVal e As DoWorkEventArgs) Handles BWorker.DoWork
         Dim FinishWithScraping As Boolean = False 'Declare variable to indicate when scraping is completed
+        SaveLog("Background worker - Successfully started")
         Do
             Dim SelectedKeyword As String 'Declare variable to store selected keyword
-
-            ThreadInfo = "Getting keywords..."
-
+            SaveLog("Background worker - Getting keyword from SQL database")
             Try
                 sql.ExecQuery("SELECT BKeywords FROM PendingKeywords;") 'Select table
                 SelectedKeyword = sql.DBDT.Rows(0).Item(0) 'Get first row / keywor5d
+                SaveLog("Background worker - Selected SQL Keyword from Pending keywords: " & SelectedKeyword.ToString)
             Catch ex As Exception
                 MsgBox("NO KEYWORDS LEFT IN THE DATABASE! PLEASE FILL IT WITH NEW KEYWORDS TO CONTINUE WORKING") 'In case of an error, that means there are no keywords in the database
+                SaveLog("Background worker - NO KEYWORDS IN THE DATABASE - ABORT")
                 Exit Sub
             End Try
 
@@ -63,58 +87,73 @@ Public Class GoogleThread
 
             Dim ExceptKeyword As String = SelectedKeyword
 
+            SaveLog("Background worker - Getting keywords from google.com")
+
             'Check if this keyword already exists, if not, add found keywords to the list
             For Each line As String In TempListOfKeywords.Lines
                 If Not line = "" Then If IsCleanTownOnTheList(line) = True Then If CheckDoneKeyword(line) = False Then If CheckPendingKeyword(line, ExceptKeyword) = False Then SuggestedKeywords.Add(line)
             Next
 
-            ThreadInfo = "Getting google search result..."
-
             Thread.Sleep(1000) 'Sleep for 1000ms (1 second)
 
+            SuggestedKeywords.Add(SelectedKeyword)
+
             For Each SugKeyword As String In SuggestedKeywords 'For each keyword on the list
+                SaveLog("Background worker - Run ScrapeGoogle() sub - Keyword: " & SugKeyword.ToString)
                 ScrapeGoogle(SugKeyword) 'Scrape google
                 'After scraping is done, delete this keyword from "PendingKeywords" table, and add it to "DoneKeywords" table
-                sql.AddParam("@item", SelectedKeyword) : sql.ExecQuery("DELETE FROM PendingKeywords WHERE BKeywords LIKE @item")
-                sql.AddParam("@kword", SelectedKeyword) : sql.ExecQuery("INSERT INTO GoogleDoneKeywords(keywords) VALUES(@kword);")
-
-                For Each item As String In SuggestedKeywords
-                    sql.AddParam("@kword", item) : sql.ExecQuery("INSERT INTO GoogleDoneKeywords(keywords) VALUES(@kword);")
-                Next
+                SaveLog("Background worker - Deleting " & SugKeyword & " from PendingKeywords table")
+                sql.AddParam("@item", SugKeyword) : sql.ExecQuery("DELETE FROM PendingKeywords WHERE BKeywords LIKE @item")
+                SaveLog("Background worker - Inserting " & SugKeyword & " to the GoogleDoneKeywords table")
+                sql.AddParam("@kword", SugKeyword) : sql.ExecQuery("INSERT INTO GoogleDoneKeywords(keywords) VALUES(@kword);")
             Next
 
             sql.ExecQuery("SELECT bplaceid FROM bcontacts;") 'Select bcontacts table
-            If sql.HasExpetion(True) Then FinishWithScraping = True 'If SQL has exception, finish with scraping and try again later
+            If sql.HasExpetion(True) Then
+                FinishWithScraping = True 'If SQL has exception, finish with scraping and try again later
+                SaveLog("Background worker - Google thread finished - SQL Exception: " & sql.Exception.ToString)
+            End If
+
             Dim rowsCount As Integer = 0
             For Each r As DataRow In sql.DBDT.Rows : rowsCount += 1 : Next 'Count rows
-            If rowsCount > 150 Then FinishWithScraping = True 'If there are more than 150 contacts in the table, stop with scraping and continue later
-
+            If rowsCount > 150 Then
+                FinishWithScraping = True 'If there are more than 150 contacts in the table, stop with scraping and continue later
+                SaveLog("Background worker - Google thread finished - rowsCount > 150")
+            End If
         Loop Until FinishWithScraping = True
+        SaveLog("Background worker - task completed")
     End Sub
     Private Sub ScrapeGoogle(ByVal link As String)
-        driver2.Navigate.GoToUrl("https://www.google.com/maps/search/recreation+and+sports+in+newtown+ct/@41.4066774,-73.3320721,14z") 'Navigate to Google maps
-        Thread.Sleep(3000) 'Wait for 3 seconds
+        SaveLog("Google thread - Navigating to google.com maps")
+        driver2.Navigate.GoToUrl("https://www.google.com/maps/search/recreation+And+sports+in+newtown+ct/@41.4066774,-73.3320721,14z") 'Navigate to Google maps
         Dim element As IWebElement 'Declare Chrome iWebElement
+        Do : Loop Until WaitForElement("searchboxinput", "ID", 15) = True 'Wait for the page to load
         element = driver2.FindElement(By.Id("searchboxinput")) 'Find search textbox on Google Maps
         element.Clear() 'Clear it
-        Thread.Sleep(1500) 'Wait for a moment
+        Thread.Sleep(500) 'Wait for a moment
         element.SendKeys(link) 'Send keyword
-        Thread.Sleep(1500) 'Wait for a moment
+        Thread.Sleep(500) 'Wait for a moment
         element.SendKeys(Keys.Enter) 'Press enter
+        SaveLog("Google thread - keyword entered")
 
         Dim NoMorePages As Boolean = False 'Variable to determine when there are no more pages
 
         Do 'Do all this until app can't find "Next" button
-
+            SaveLog("Google thread - Waiting for results to load")
             Do : Loop Until WaitForElement("section-result", "Class", 15) = True 'Wait for the page to load
-
+            SaveLog("Google thread - Results loaded")
             Dim elementTexts As List(Of String) = New List(Of String)(driver2.FindElements(By.ClassName("section-result-content")).[Select](Function(iw) iw.GetAttribute("outerHTML"))) 'Get all elements with contacts data
             Dim ContactID As Integer = 1 'Variable to determine contact ID
             For Each ContactEntry As String In elementTexts 'For each contact on the page...
-                If FWorkSpace.QuitGoogleThread = True Then QuitGoogleThread() : Exit Sub 'Checks if user requested to stop scraping
+                If FWorkSpace.QuitGoogleThread = True Then
+                    QuitGoogleThread() 'Checks if user requested to stop scraping
+                    SaveLog("Google thread - User requested to abort scraping")
+                    Exit Sub
+                End If
 
-                Thread.Sleep(3000) 'Wait for 3 seconds
                 ContactID += 2 'First contact (starts at #3)
+                SaveLog("Google thread - Processing contact ID: " & ContactID)
+
                 'Declare contact details variables
                 Dim BusinessName As String = "", FullBusinessName As String = "", BusinessAddress As String = "", BusinessPhone As String = "", TempWebsite As String = "", BusinessWebsite As String = ""
 
@@ -124,31 +163,39 @@ Public Class GoogleThread
                 BusinessName = GetStringBeforeOrAfter(TempBusinessName, """>", False, True) 'Format string
                 TempWebsite = ReturnMatchedURLS(ContactEntry, False) 'Extract website
 
+                SaveLog("Google thread - Processing contact name: " & BusinessName)
+
                 If CheckBName(BusinessName) = False Then 'If contact name does not exist in the database, we can open it and proceed with scraping
                     Try
+                        SaveLog("Google thread - Opening contact window")
                         element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/div[4]/div[1]/div[" & ContactID.ToString & "]/div[1]")) 'Find contact element
                         Thread.Sleep(1000) 'Wait for a second
                         element.Click() 'Click on the contact
                     Catch ex As Exception
+                        SaveLog("Google thread - Failed to open contact window: " & ex.Message)
                     End Try
 
                     If TempWebsite = "False" Then TempWebsite = "" 'If website is false, set it to nothing. This sometimes can happen when function does not find website, and then it returns "False" instead of nothing
 
                     If Not TempWebsite = "" Then 'If website is not nothing...
-
+                        SaveLog("Google thread - " & BusinessName & " website found: " & TempWebsite)
                         BusinessWebsite = FormatWebsite(TempWebsite) 'Format website
+                        SaveLog("Google thread - Formatted website: " & BusinessWebsite)
 
                         If Not CheckDuplicateWebsite(BusinessWebsite) = True Then 'If this website is not in the database, proceed with scraping
                             If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath", 15) = True Then 'If contact details are loaded in the browser
                                 element = driver2.FindElement(By.Id("pane")) 'Find main ID element
                                 Dim BusRTB As New RichTextBox 'Variable to store outerHTML of the element
                                 BusRTB.Text = element.GetAttribute("outerHTML") 'Set element outerHTML to the RTB variable
+                                SaveLog("Google thread - Getting " & BusinessWebsite & " outerHTML")
                                 Try
                                     Dim RemoveLeft As New RichTextBox, RemoveRight As New RichTextBox 'RTBs to store text from the left and from the right
-                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
 
+                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
                                     RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
                                     BusinessAddress = RemoveRight.Text 'String between is our contact address
+
+                                    SaveLog("Google thread - Contact address: " & BusinessAddress)
 
                                     RemoveLeft.Text = "" 'Clear variable
                                     RemoveRight.Text = "" 'Clear variable
@@ -157,27 +204,38 @@ Public Class GoogleThread
                                     RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
                                     BusinessPhone = RemoveRight.Text 'String between is our contact phone
 
+                                    SaveLog("Google thread - Contact phone: " & BusinessPhone)
+
                                     ShouldSaveEntry = True 'All good - we can save this contact
                                 Catch ex As Exception
                                 End Try
-
+                            Else
+                                SaveLog("Google thread - element xPath: //*[@id='pane']/div/div[1]/div/div/button/span not found")
                             End If
+                        Else
+                            SaveLog("Google thread - " & BusinessWebsite & " already exists in the database")
                         End If
                     End If
 
                     If BusinessWebsite = "" Then 'If business website is nothing...
+                        SaveLog("Google thread -" & BusinessName & " website not found")
                         If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath", 15) = True Then 'If contact details are loaded in the browser
                             element = driver2.FindElement(By.Id("pane")) 'Find main ID element
                             Dim BusRTB As New RichTextBox 'Variable to store outerHTML of the element
                             BusRTB.Text = element.GetAttribute("outerHTML") 'Set element outerHTML to the RTB variable
+                            SaveLog("Google thread - Getting " & BusinessWebsite & " outerHTML")
                             Try
                                 Dim RemoveLeft As New RichTextBox, RemoveRight As New RichTextBox 'RTBs to store text from the left and from the right
+
+                                SaveLog("Google thread - Still trying to find website")
 
                                 RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Website: ", False, True) 'Get website string from the left
                                 RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get website string from the right
                                 TempWebsite = RemoveRight.Text 'String between is our contact website
 
                                 If TempWebsite = "False" Then 'If TempWebsite is false, that means google did not provide website for this contact
+                                    SaveLog("Google thread - Website not found")
+
                                     TempWebsite = "" 'Clear variable
 
                                     RemoveLeft.Text = "" 'Clear variable
@@ -186,6 +244,7 @@ Public Class GoogleThread
                                     RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
                                     RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
                                     BusinessAddress = RemoveRight.Text 'String between is our contact address
+                                    SaveLog("Google thread - Contact address: " & BusinessAddress)
 
                                     RemoveLeft.Text = "" 'Clear variable
                                     RemoveRight.Text = "" 'Clear variable
@@ -193,10 +252,14 @@ Public Class GoogleThread
                                     RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
                                     RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
                                     BusinessPhone = RemoveRight.Text 'String between is our contact phone
+                                    SaveLog("Google thread - Contact phone: " & BusinessPhone)
 
                                     ShouldSaveEntry = True 'All good - we can save this contact
                                 Else 'If TempWebsite is not False, that means google provided website for this contact
+                                    SaveLog("Google thread - " & BusinessName & " website found: " & TempWebsite)
+
                                     BusinessWebsite = FormatWebsite(TempWebsite) 'Format the website
+                                    SaveLog("Google thread - Formatted website: " & BusinessWebsite)
 
                                     If Not CheckDuplicateWebsite(BusinessWebsite) = True Then 'If this website is not in the database, proceed with scraping
                                         RemoveLeft.Text = "" 'Clear variable
@@ -205,6 +268,7 @@ Public Class GoogleThread
                                         RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
                                         RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
                                         BusinessAddress = RemoveRight.Text 'String between is our contact address
+                                        SaveLog("Google thread - Contact address: " & BusinessAddress)
 
                                         RemoveLeft.Text = "" 'Clear variable
                                         RemoveRight.Text = "" 'Clear variable
@@ -212,26 +276,36 @@ Public Class GoogleThread
                                         RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
                                         RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
                                         BusinessPhone = RemoveRight.Text 'String between is our contact phone
+                                        SaveLog("Google thread - Contact phone: " & BusinessPhone)
 
                                         ShouldSaveEntry = True 'All good - we can save this contact
+                                    Else
+                                        SaveLog("Google thread - " & BusinessWebsite & " already exists in the database")
                                     End If
                                 End If
                             Catch ex As Exception
                             End Try
+                        Else
+                            SaveLog("Google thread - element xPath: //*[@id='pane']/div/div[1]/div/div/button/span not found")
                         End If
                     End If
 
-                    Thread.Sleep(3500) 'Wait for 3+ seconds
+                    Thread.Sleep(1000) 'Wait for 3+ seconds
+                    SaveLog("Google thread - Waiting for 'Back' button")
                     If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath", 10) = True Then 'If "Back" button is present...
                         Try
                             element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span")) 'Find "Back" button element
                             element.Click() 'Click on it
+                            SaveLog("Google thread - Clicked on the back button")
                         Catch ex As Exception
+                            SaveLog("Google thread - Exception occured while attempting to click on the 'back' button: " & ex.Message & " - Trying again...")
                             Thread.Sleep(5000) 'Wait for 5 seconds and try again
                             element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span")) 'Find "Back" button element
                             element.Click() 'Click on it
+                            SaveLog("Google thread - Clicked on the back button")
                         End Try
 
+                        SaveLog("Google thread - Formatting data...")
                         BusinessName = BusinessName.Replace("&amp;", "&") 'Format contact name
                         If BusinessAddress = "False" Then BusinessAddress = "" 'Format address
                         If BusinessPhone = "False" Then BusinessPhone = "" 'Format phone
@@ -239,25 +313,43 @@ Public Class GoogleThread
                         If ShouldSaveEntry = True Then 'If we can save this contact...
                             If IsTownOnTheList(BusinessAddress) = True Then SaveIntoDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") Else SaveIntoOTDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") 'Save into adequate database (this splits contacts from towns we're working on from others into different SQL tables)
                         Else
+                            SaveLog("Google thread - Blacklisting: " & BusinessName & " and " & BusinessWebsite)
                             BlackListEntry(BusinessName, BusinessWebsite) 'If we can't save this contact for any reason, add this contact to duplicate tables
                         End If
                     End If
+                Else
+                    SaveLog("Google thread - Duplicate contact: " & BusinessName)
                 End If
             Next
+
+            SaveLog("Google thread - Finished with this page. Trying to click on the 'Next' button")
 
             Thread.Sleep(1000) 'Wait for a second...
 
             Try
                 element = driver2.FindElement(By.XPath("/html/body/jsl/div[3]/div[9]/div[8]/div/div[1]/div/div/div[4]/div[2]/div/div[1]/div/button[2]/span")) : element.Click() 'Try to find a "next" button on the google page, and if it exists, click on it
+                SaveLog("Google thread - Clicked on the next button")
                 Thread.Sleep(5000) 'Wait for 5 seconds
             Catch ex As Exception
+                SaveLog("Google thread - No 'Next' button is present")
                 NoMorePages = True 'In case of an error, set this to true.
             End Try
         Loop Until NoMorePages = True 'Means there are no more pages to navigate to, so scraping job is done! Moving on to the next keyword.
+        SaveLog("Google thread - task completed")
     End Sub
 
 
 #Region "Procedures"
+    Public Sub SaveLog(ByVal LogLine As String)
+        Dim theContDir As String = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) 'Specify MyDocuments folder for WCM Logs
+        Dim newDir As String = "WCM Logs" 'Log Folder name
+        Dim thePath As String = Path.Combine(theContDir, newDir) 'Combine MyDocuments with folder name
+
+        Dim sb As StringBuilder = New StringBuilder()
+        Dim localDate = DateTime.Now 'Get current time
+        sb.AppendLine(localDate & ": " & LogLine & Environment.NewLine)
+        File.AppendAllText(CurrentLogPath, sb.ToString())
+    End Sub
     Private Sub SendEnterOnGoogle()
         Dim element As IWebElement 'Declare Chrome iWebElement
         Try
@@ -269,11 +361,12 @@ Public Class GoogleThread
         End Try
     End Sub
     Private Sub QuitGoogleThread()
+        SaveLog("Google Thread - Quit Chrome driver and SQL")
         driver2.Dispose() 'Dispose Chrome instance
         driver2.Quit() 'Quit Chrome instance
         sql.DBCon.Close() 'Close SQL connection
         ThreadWorking = False 'Thread not working
-        ThreadInfo = "" 'Thread info is now nothing
+        SaveLog("Google Thread - Success")
     End Sub
     Private Sub BlackListEntry(ByVal BName As String, ByVal BWebsite As String)
         'This sub adds contact to the database, in case we want to blacklist it (we don't need it)
@@ -303,8 +396,11 @@ Public Class GoogleThread
         sql.AddParam("@EW", BWebsite)
         sql.AddParam("@EI", EleIndustry)
 
+        SaveLog("Saving following results into the database: " & BName & " - " & BAddress & " - " & BPhone & " - " & BWebsite & " - " & EleIndustry)
+
         'Execute query - Insert results into the database
         sql.ExecQuery("INSERT INTO bcontacts(bplaceid, bname, bphone, baddress, bwebsite, btype) VALUES(@piD, @EN, @EP, @EA, @EW, @EI);")
+        If sql.HasExpetion Then SaveLog("FATAL SQL EXCEPTION: " & sql.Exception)
     End Sub
     Private Sub SaveIntoOTDatabase(ByVal BName, ByVal BAddress, ByVal BPhone, ByVal BWebsite, ByVal EleIndustry)
         'This sub adds data to the bcontactsOT table, which are all contacts from different towns & areas. We might use them later.
@@ -317,8 +413,11 @@ Public Class GoogleThread
         sql.AddParam("@EW", BWebsite)
         sql.AddParam("@EI", EleIndustry)
 
+        SaveLog("Saving following results into OT the database: " & BName & " - " & BAddress & " - " & BPhone & " - " & BWebsite & " - " & EleIndustry)
+
         'Execute query - Insert results into the database
         sql.ExecQuery("INSERT INTO bcontactsOT(bplaceid, bname, bphone, baddress, bwebsite, btype) VALUES(@piD, @EN, @EP, @EA, @EW, @EI);")
+        If sql.HasExpetion Then SaveLog("FATAL SQL EXCEPTION: " & sql.Exception)
     End Sub
     Private Sub BWorker_RunWorkerCompleted(ByVal sender As Object, ByVal e As RunWorkerCompletedEventArgs) Handles BWorker.RunWorkerCompleted
         QuitGoogleThread() 'Thread finished with scraping >> quit
