@@ -17,12 +17,17 @@ Public Class GoogleThread
 
     Public Sub InitializeGoogleThread()
         Dim theContDir As String = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) 'Specify MyDocuments folder for WCM Logs
-        Dim newDir As String = "WCM Logs" 'Folder name
+        Dim newDir As String = "WCMLogs" 'Folder name
         Dim thePath As String = IO.Path.Combine(theContDir, newDir) 'Combine MyDocuments with folder name
         If Not Directory.Exists(thePath) Then Directory.CreateDirectory(thePath) 'Create directory if it does not exists
 
-        Dim localDate = DateTime.Now
-        CurrentLogPath = thePath & "Log:" & localDate & ".txt"
+        Dim localDate As String = DateTime.Now
+        Dim localDateWithoutSlashes As String = DateTime.Now.ToString("yyyyMMdd")
+
+        Dim Random As New Random
+        Dim result As Integer = Random.Next(100, 10000)
+
+        CurrentLogPath = thePath & "\Log" & localDateWithoutSlashes & "-" & result.ToString & ".txt"
 
         Dim fs As FileStream = File.Create(CurrentLogPath) ' Create or overwrite the file.
 
@@ -342,12 +347,12 @@ Public Class GoogleThread
 #Region "Procedures"
     Public Sub SaveLog(ByVal LogLine As String)
         Dim theContDir As String = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) 'Specify MyDocuments folder for WCM Logs
-        Dim newDir As String = "WCM Logs" 'Log Folder name
+        Dim newDir As String = "WCMLogs" 'Log Folder name
         Dim thePath As String = Path.Combine(theContDir, newDir) 'Combine MyDocuments with folder name
 
         Dim sb As StringBuilder = New StringBuilder()
         Dim localDate = DateTime.Now 'Get current time
-        sb.AppendLine(localDate & ": " & LogLine & Environment.NewLine)
+        sb.AppendLine(localDate & ": " & LogLine)
         File.AppendAllText(CurrentLogPath, sb.ToString())
     End Sub
     Private Sub SendEnterOnGoogle()
