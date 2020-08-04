@@ -945,7 +945,7 @@ Public Class FWorkSpace
 
         driverService.HideCommandPromptWindow = True 'Hide command prompt from user
 
-        optionOn.AddUserProfilePreference("profile.default_content_setting_values.geolocation", 2) 'Disable certain types of images
+        optionOn.AddUserProfilePreference("profile.default_content_setting_values.geolocation", 2) 'Disable location tracking for this Chrome instance
 
         optionOn.AddArgument("start-maximized") 'Instruct Chrome to run in maximized mode
         optionOn.AddArgument("--disable-infobars") 'Disable infobars

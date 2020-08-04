@@ -1,87 +1,80 @@
 ﻿Imports System.ComponentModel
-Imports System.Net
 Imports System.Text.RegularExpressions
 Imports System.Threading
-Imports System.Xml
 Imports OpenQA.Selenium
 Imports OpenQA.Selenium.Chrome
 Public Class GoogleThread
     Private WithEvents BWorker As BackgroundWorker 'Declaring Background worker
-    Public ThreadWorking As Boolean = False
-    Public ThreadInfo As String
-    Public driver2 As IWebDriver
-    ReadOnly sql As New SQLiteControl()
+    Public ThreadWorking As Boolean = False 'Declaring Thread boolean to know when thread is working
+    Public ThreadInfo As String 'Thread info string
+    Public driver2 As IWebDriver 'Chrome WebDriver
+    ReadOnly sql As New SQLiteControl() 'Declare SQL variable
 
-    Dim CityarrayNew As New ArrayList
+    Dim CityarrayNew As New ArrayList 'City array list
 
     Public Sub InitializeGoogleThread()
-        ThreadWorking = True
-        ThreadInfo = "Initializing thread..."
+        ThreadWorking = True 'Set this to true to inform the app this thread is working
+        ThreadInfo = "Initializing thread..." 'Inform user that thread is working
         Dim driverService2 = ChromeDriverService.CreateDefaultService()
-        driverService2.HideCommandPromptWindow = True
+        driverService2.HideCommandPromptWindow = True  'Hide command prompt from user
         Dim optionOn As New ChromeOptions
-        optionOn.AddUserProfilePreference("profile.default_content_setting_values.geolocation", 2)
-        optionOn.AddArgument("start-maximized")
-        optionOn.AddArgument("--disable-infobars")
-        optionOn.AddArgument("--lang=en-GB")
-        optionOn.AddArguments("headless")
+        optionOn.AddUserProfilePreference("profile.default_content_setting_values.geolocation", 2) 'Disable location tracking for this Chrome instance
+        optionOn.AddArgument("start-maximized") 'Instruct Chrome to run in maximized mode
+        optionOn.AddArgument("--disable-infobars") 'Disable infobars
+        optionOn.AddArgument("--lang=en-GB") 'Set default language to English
+        optionOn.AddArguments("headless") 'Hide Chrome browser from the user. Headless mode means Chrome will run in the background
         optionOn.AddUserProfilePreference("profile.default_content_setting_values.images", 2) 'Disable or enable images
         optionOn.AddArgument("--blink-settings=imagesEnabled=false") 'Disable or enable images
 
-        driver2 = New ChromeDriver(driverService2, optionOn)
+        driver2 = New ChromeDriver(driverService2, optionOn) 'Initialize ChromeDriver with added arguments
 
-        Dim element As IWebElement
+        Dim element As IWebElement ' Declare Chrome iWebElement
 
-        driver2.Navigate.GoToUrl("https://google.com")
+        driver2.Navigate.GoToUrl("https://google.com") 'Navigate browser to Google homepage
 
         Try
-            element = driver2.FindElement(By.LinkText("English"))
-            element.Click()
+            element = driver2.FindElement(By.LinkText("English")) 'Find "English" button and click on it (to set default Google language)
+            element.Click() 'Click on that button
         Catch ex As Exception
         End Try
 
         BWorker = New BackgroundWorker 'Initializing a new instance of Background worker
         BWorker.RunWorkerAsync() 'Run previously initialized background worker
-
     End Sub
-
     Private Sub BwRunSelenium_DoWork(ByVal sender As Object, ByVal e As DoWorkEventArgs) Handles BWorker.DoWork
-        Dim FinishWithScraping As Boolean = False
+        Dim FinishWithScraping As Boolean = False 'Declare variable to indicate when scraping is completed
         Do
-            Dim SelectedKeyword As String = ""
+            Dim SelectedKeyword As String 'Declare variable to store selected keyword
 
             ThreadInfo = "Getting keywords..."
 
             Try
-                sql.ExecQuery("SELECT BKeywords FROM PendingKeywords;")
-                SelectedKeyword = sql.DBDT.Rows(0).Item(0)
+                sql.ExecQuery("SELECT BKeywords FROM PendingKeywords;") 'Select table
+                SelectedKeyword = sql.DBDT.Rows(0).Item(0) 'Get first row / keywor5d
             Catch ex As Exception
-                MsgBox("NO KEYWORDS LEFT IN THE DATABASE! PLEASE FILL IT WITH NEW KEYWORDS TO CONTINUE WORKING")
+                MsgBox("NO KEYWORDS LEFT IN THE DATABASE! PLEASE FILL IT WITH NEW KEYWORDS TO CONTINUE WORKING") 'In case of an error, that means there are no keywords in the database
                 Exit Sub
             End Try
 
-            Dim TempListOfKeywords As New RichTextBox
-            Dim SuggestedKeywords As New ArrayList
+            Dim TempListOfKeywords As New RichTextBox, SuggestedKeywords As New ArrayList, ListOfGoogleSearchLinks As New ArrayList
 
-            Dim ListOfGoogleSearchLinks As New ArrayList
-            '    'Getting keyword sugggestions from google
-
-            TempListOfKeywords.Text = EnterKeywordOnGoogle(SelectedKeyword)
-            TempListOfKeywords.AppendText(Environment.NewLine & SelectedKeyword)
+            TempListOfKeywords.Text = EnterKeywordOnGoogle(SelectedKeyword) 'Enter selected keyword to google.com
+            TempListOfKeywords.AppendText(Environment.NewLine & SelectedKeyword) 'Append additional keywords to the RTB
 
             Dim ExceptKeyword As String = SelectedKeyword
 
+            'Check if this keyword already exists, if not, add found keywords to the list
             For Each line As String In TempListOfKeywords.Lines
                 If Not line = "" Then If IsCleanTownOnTheList(line) = True Then If CheckDoneKeyword(line) = False Then If CheckPendingKeyword(line, ExceptKeyword) = False Then SuggestedKeywords.Add(line)
             Next
 
             ThreadInfo = "Getting google search result..."
 
-            Thread.Sleep(1000)
+            Thread.Sleep(1000) 'Sleep for 1000ms (1 second)
 
-            For Each SugKeyword As String In SuggestedKeywords
-                ScrapeGoogle(SugKeyword)
-
+            For Each SugKeyword As String In SuggestedKeywords 'For each keyword on the list
+                ScrapeGoogle(SugKeyword) 'Scrape google
+                'After scraping is done, delete this keyword from "PendingKeywords" table, and add it to "DoneKeywords" table
                 sql.AddParam("@item", SelectedKeyword) : sql.ExecQuery("DELETE FROM PendingKeywords WHERE BKeywords LIKE @item")
                 sql.AddParam("@kword", SelectedKeyword) : sql.ExecQuery("INSERT INTO GoogleDoneKeywords(keywords) VALUES(@kword);")
 
@@ -90,124 +83,81 @@ Public Class GoogleThread
                 Next
             Next
 
-
-            sql.ExecQuery("SELECT bplaceid FROM bcontacts;")
-            If sql.HasExpetion(True) Then FinishWithScraping = True
-            Dim ii As Integer = 0
-            For Each r As DataRow In sql.DBDT.Rows : ii += 1 : Next
-            If ii > 150 Then FinishWithScraping = True
+            sql.ExecQuery("SELECT bplaceid FROM bcontacts;") 'Select bcontacts table
+            If sql.HasExpetion(True) Then FinishWithScraping = True 'If SQL has exception, finish with scraping and try again later
+            Dim rowsCount As Integer = 0
+            For Each r As DataRow In sql.DBDT.Rows : rowsCount += 1 : Next 'Count rows
+            If rowsCount > 150 Then FinishWithScraping = True 'If there are more than 150 contacts in the table, stop with scraping and continue later
 
         Loop Until FinishWithScraping = True
     End Sub
-
-    Private Sub BWorker_RunWorkerCompleted(ByVal sender As Object, ByVal e As RunWorkerCompletedEventArgs) Handles BWorker.RunWorkerCompleted
-        QuitGoogleThread()
-    End Sub
-
-    Private Sub QuitGoogleThread()
-        driver2.Dispose()
-        driver2.Quit()
-        sql.DBCon.Close()
-        ThreadWorking = False
-        ThreadInfo = ""
-    End Sub
-
-
     Private Sub ScrapeGoogle(ByVal link As String)
-        driver2.Navigate.GoToUrl("https://www.google.com/maps/search/recreation+and+sports+in+newtown+ct/@41.4066774,-73.3320721,14z")
-        Thread.Sleep(3000)
-        Dim element As IWebElement
-        element = driver2.FindElement(By.Id("searchboxinput"))
-        element.Clear()
-        Thread.Sleep(1500)
-        element.SendKeys(link)
-        Thread.Sleep(1500)
-        element.SendKeys(Keys.Enter)
+        driver2.Navigate.GoToUrl("https://www.google.com/maps/search/recreation+and+sports+in+newtown+ct/@41.4066774,-73.3320721,14z") 'Navigate to Google maps
+        Thread.Sleep(3000) 'Wait for 3 seconds
+        Dim element As IWebElement 'Declare Chrome iWebElement
+        element = driver2.FindElement(By.Id("searchboxinput")) 'Find search textbox on Google Maps
+        element.Clear() 'Clear it
+        Thread.Sleep(1500) 'Wait for a moment
+        element.SendKeys(link) 'Send keyword
+        Thread.Sleep(1500) 'Wait for a moment
+        element.SendKeys(Keys.Enter) 'Press enter
 
-        Dim NoMorePages As Boolean = False
+        Dim NoMorePages As Boolean = False 'Variable to determine when there are no more pages
 
-        Dim CurrentPageInteger As Integer = 1
+        Do 'Do all this until app can't find "Next" button
 
-        Do
+            Do : Loop Until WaitForElement("section-result", "Class") = True 'Wait for the page to load
 
-            Do : Loop Until WaitForClassElement("section-result") = True
+            Dim elementTexts As List(Of String) = New List(Of String)(driver2.FindElements(By.ClassName("section-result-content")).[Select](Function(iw) iw.GetAttribute("outerHTML"))) 'Get all elements with contacts data
+            Dim ContactID As Integer = 1 'Variable to determine contact ID
+            For Each ContactEntry As String In elementTexts 'For each contact on the page...
+                If FWorkSpace.QuitGoogleThread = True Then QuitGoogleThread() : Exit Sub 'Checks if user requested to stop scraping
 
-            CurrentPageInteger += 1
+                Thread.Sleep(3000) 'Wait for 3 seconds
+                ContactID += 2 'First contact (starts at #3)
+                'Declare contact details variables
+                Dim BusinessName As String = "", FullBusinessName As String = "", BusinessAddress As String = "", BusinessPhone As String = "", TempWebsite As String = "", BusinessWebsite As String = ""
 
-            Dim elementTexts As List(Of String) = New List(Of String)(driver2.FindElements(By.ClassName("section-result-content")).[Select](Function(iw) iw.GetAttribute("outerHTML")))
-            Dim i As Integer = 1
-            For Each ContactEntry As String In elementTexts
-                If FWorkSpace.QuitGoogleThread = True Then QuitGoogleThread() : Exit Sub
+                Dim ShouldSaveEntry As Boolean = False 'This variable indicates if we should save this contact or not
 
-                ThreadInfo = "Google: Page - " & CurrentPageInteger & " - item: " & i.ToString
-                Thread.Sleep(3000)
-                i += 2
-                Dim BusinessName As String = ""
-                Dim FullBusinessName As String = ""
-                Dim BusinessAddress As String = ""
-                Dim BusinessPhone As String = ""
-                Dim TempWebsite As String = ""
-                Dim BusinessWebsite As String = ""
+                Dim TempBusinessName As String = ExtractData(ContactEntry, "class=""section-result-title""><span ", "</span>") 'Extract contact name string
+                BusinessName = GetStringBeforeOrAfter(TempBusinessName, """>", False, True) 'Format string
+                TempWebsite = ReturnMatchedURLS(ContactEntry, False) 'Extract website
 
-                Dim ShouldSaveEntry As Boolean = False
-
-                Dim TempBusinessName As String = ExtractData(ContactEntry, "class=""section-result-title""><span ", "</span>")
-                BusinessName = GetStringBeforeOrAfter(TempBusinessName, """>", False, True)
-                TempWebsite = ReturnMatchedURLS(ContactEntry, False)
-
-                If CheckBName(BusinessName) = False Then
-
+                If CheckBName(BusinessName) = False Then 'If contact name does not exist in the database, we can open it and proceed with scraping
                     Try
-                        element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/div[4]/div[1]/div[" & i.ToString & "]/div[1]"))
-
-                        Thread.Sleep(1000)
-
-                        element.Click()
+                        element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/div[4]/div[1]/div[" & ContactID.ToString & "]/div[1]")) 'Find contact element
+                        Thread.Sleep(1000) 'Wait for a second
+                        element.Click() 'Click on the contact
                     Catch ex As Exception
-
                     End Try
 
+                    If TempWebsite = "False" Then TempWebsite = "" 'If website is false, set it to nothing. This sometimes can happen when function does not find website, and then it returns "False" instead of nothing
 
-                    If BusinessName = "Stamford IT Consultants" Then
-                        BusinessName = "Stamford IT Consultants"
-                    End If
+                    If Not TempWebsite = "" Then 'If website is not nothing...
 
-                    If TempWebsite = "False" Then TempWebsite = ""
+                        BusinessWebsite = FormatWebsite(TempWebsite) 'Format website
 
-                    If Not TempWebsite = "" Then
-
-                        BusinessWebsite = FormatWebsite(TempWebsite)
-
-                        If Not CheckDuplicateWebsite(BusinessWebsite) = True Then
-                            If WaitForXPathElement("//*[@id='pane']/div/div[1]/div/div/button/span") = True Then
-                                element = driver2.FindElement(By.Id("pane"))
-                                Dim BusRTB As New RichTextBox
-                                BusRTB.Text = element.GetAttribute("outerHTML")
+                        If Not CheckDuplicateWebsite(BusinessWebsite) = True Then 'If this website is not in the database, proceed with scraping
+                            If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath") = True Then 'If contact details are loaded in the browser
+                                element = driver2.FindElement(By.Id("pane")) 'Find main ID element
+                                Dim BusRTB As New RichTextBox 'Variable to store outerHTML of the element
+                                BusRTB.Text = element.GetAttribute("outerHTML") 'Set element outerHTML to the RTB variable
                                 Try
+                                    Dim RemoveLeft As New RichTextBox, RemoveRight As New RichTextBox 'RTBs to store text from the left and from the right
+                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
 
-                                    Dim RemoveLeft As New RichTextBox
-                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True)
+                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
+                                    BusinessAddress = RemoveRight.Text 'String between is our contact address
 
-                                    Dim RemoveRight As New RichTextBox
-                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False)
-                                    BusinessAddress = RemoveRight.Text
+                                    RemoveLeft.Text = "" 'Clear variable
+                                    RemoveRight.Text = "" 'Clear variable
 
+                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
+                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
+                                    BusinessPhone = RemoveRight.Text 'String between is our contact phone
 
-                                    RemoveLeft.Text = ""
-                                    RemoveRight.Text = ""
-                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True)
-
-                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False)
-                                    BusinessPhone = RemoveRight.Text
-
-                                    RemoveLeft.Text = ""
-                                    RemoveRight.Text = ""
-                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Website: ", False, True)
-
-                                    'RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False)
-                                    'BusinessWebsite = RemoveRight.Text
-
-                                    ShouldSaveEntry = True
+                                    ShouldSaveEntry = True 'All good - we can save this contact
                                 Catch ex As Exception
                                 End Try
 
@@ -215,133 +165,136 @@ Public Class GoogleThread
                         End If
                     End If
 
-                    If BusinessWebsite = "" Then
-                        If WaitForXPathElement("//*[@id='pane']/div/div[1]/div/div/button/span") = True Then
-                            element = driver2.FindElement(By.Id("pane"))
-                            Dim BusRTB As New RichTextBox
-                            BusRTB.Text = element.GetAttribute("outerHTML")
+                    If BusinessWebsite = "" Then 'If business website is nothing...
+                        If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath") = True Then 'If contact details are loaded in the browser
+                            element = driver2.FindElement(By.Id("pane")) 'Find main ID element
+                            Dim BusRTB As New RichTextBox 'Variable to store outerHTML of the element
+                            BusRTB.Text = element.GetAttribute("outerHTML") 'Set element outerHTML to the RTB variable
                             Try
-                                Dim RemoveLeft As New RichTextBox
-                                Dim RemoveRight As New RichTextBox
-                                RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Website: ", False, True)
-                                RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False)
-                                TempWebsite = RemoveRight.Text
+                                Dim RemoveLeft As New RichTextBox, RemoveRight As New RichTextBox 'RTBs to store text from the left and from the right
 
-                                If TempWebsite = "False" Then
-                                    TempWebsite = ""
+                                RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Website: ", False, True) 'Get website string from the left
+                                RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get website string from the right
+                                TempWebsite = RemoveRight.Text 'String between is our contact website
 
-                                    RemoveLeft.Text = ""
-                                    RemoveRight.Text = ""
+                                If TempWebsite = "False" Then 'If TempWebsite is false, that means google did not provide website for this contact
+                                    TempWebsite = "" 'Clear variable
 
-                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True)
+                                    RemoveLeft.Text = "" 'Clear variable
+                                    RemoveRight.Text = "" 'Clear variable
 
+                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
+                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
+                                    BusinessAddress = RemoveRight.Text 'String between is our contact address
 
-                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False)
-                                    BusinessAddress = RemoveRight.Text
+                                    RemoveLeft.Text = "" 'Clear variable
+                                    RemoveRight.Text = "" 'Clear variable
 
+                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
+                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
+                                    BusinessPhone = RemoveRight.Text 'String between is our contact phone
 
-                                    RemoveLeft.Text = ""
-                                    RemoveRight.Text = ""
-                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True)
+                                    ShouldSaveEntry = True 'All good - we can save this contact
+                                Else 'If TempWebsite is not False, that means google provided website for this contact
+                                    BusinessWebsite = FormatWebsite(TempWebsite) 'Format the website
 
-                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False)
-                                    BusinessPhone = RemoveRight.Text
+                                    If Not CheckDuplicateWebsite(BusinessWebsite) = True Then 'If this website is not in the database, proceed with scraping
+                                        RemoveLeft.Text = "" 'Clear variable
+                                        RemoveRight.Text = "" 'Clear variable
 
-                                    ShouldSaveEntry = True
-                                Else
-                                    BusinessWebsite = FormatWebsite(TempWebsite)
+                                        RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
+                                        RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
+                                        BusinessAddress = RemoveRight.Text 'String between is our contact address
 
-                                    If Not CheckDuplicateWebsite(BusinessWebsite) = True Then
-                                        RemoveLeft.Text = ""
-                                        RemoveRight.Text = ""
+                                        RemoveLeft.Text = "" 'Clear variable
+                                        RemoveRight.Text = "" 'Clear variable
 
-                                        RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True)
+                                        RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
+                                        RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
+                                        BusinessPhone = RemoveRight.Text 'String between is our contact phone
 
-
-                                        RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False)
-                                        BusinessAddress = RemoveRight.Text
-
-
-                                        RemoveLeft.Text = ""
-                                        RemoveRight.Text = ""
-                                        RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True)
-
-                                        RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False)
-                                        BusinessPhone = RemoveRight.Text
-
-                                        ShouldSaveEntry = True
+                                        ShouldSaveEntry = True 'All good - we can save this contact
                                     End If
                                 End If
-
                             Catch ex As Exception
                             End Try
-
                         End If
                     End If
 
-                    Thread.Sleep(3500)
+                    Thread.Sleep(3500) 'Wait for 3+ seconds
 
                     Try
-                        element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span"))
-                        element.Click()
+                        element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span")) 'Find "Back" button element
+                        element.Click() 'Click on it
                     Catch ex As Exception
-                        Exit For
+                        Thread.Sleep(5000) 'Wait for 5 seconds and try again
+                        element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span")) 'Find "Back" button element
+                        element.Click() 'Click on it
                     End Try
 
-                    BusinessName = BusinessName.Replace("&amp;", "&")
-                    If BusinessAddress = "False" Then BusinessAddress = ""
-                    If BusinessPhone = "False" Then BusinessPhone = ""
+                    BusinessName = BusinessName.Replace("&amp;", "&") 'Format contact name
+                    If BusinessAddress = "False" Then BusinessAddress = "" 'Format address
+                    If BusinessPhone = "False" Then BusinessPhone = "" 'Format phone
 
-                    If ShouldSaveEntry = True Then
-                        If IsTownOnTheList(BusinessAddress) = True Then SaveIntoDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") Else SaveIntoOTDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB")
+                    If ShouldSaveEntry = True Then 'If we can save this contact...
+                        If IsTownOnTheList(BusinessAddress) = True Then SaveIntoDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") Else SaveIntoOTDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") 'Save into adequate database (this splits contacts from towns we're working on from others into different SQL tables)
                     Else
-                        BlackListEntry(BusinessName, BusinessWebsite)
+                        BlackListEntry(BusinessName, BusinessWebsite) 'If we can't save this contact for any reason, add this contact to duplicate tables
                     End If
                 End If
             Next
 
-            Thread.Sleep(1000)
+            Thread.Sleep(1000) 'Wait for a second...
 
             Try
-                element = driver2.FindElement(By.XPath("/html/body/jsl/div[3]/div[9]/div[8]/div/div[1]/div/div/div[4]/div[2]/div/div[1]/div/button[2]/span")) : element.Click()
-
-                Thread.Sleep(5000)
+                element = driver2.FindElement(By.XPath("/html/body/jsl/div[3]/div[9]/div[8]/div/div[1]/div/div/div[4]/div[2]/div/div[1]/div/button[2]/span")) : element.Click() 'Try to find a "next" button on the google page, and if it exists, click on it
+                Thread.Sleep(5000) 'Wait for 5 seconds
             Catch ex As Exception
-                NoMorePages = True
+                NoMorePages = True 'In case of an error, set this to true.
             End Try
-        Loop Until NoMorePages = True
+        Loop Until NoMorePages = True 'Means there are no more pages to navigate to, so scraping job is done! Moving on to the next keyword.
     End Sub
 
-    Public Function FormatWebsite(ByVal BusinessWebsite As String)
-        BusinessWebsite = BusinessWebsite.Replace("https://www.", "").Replace("http://www.", "").Replace("https://", "").Replace("http://", "").Replace("www.", "")
-        Dim TempBusinessWebsite As String = BusinessWebsite
-        If TempBusinessWebsite.Contains("/") Then BusinessWebsite = TempBusinessWebsite.Substring(0, TempBusinessWebsite.IndexOf("/"))
-        BusinessWebsite = BusinessWebsite.Replace("/", "")
 
-        Return BusinessWebsite
-    End Function
-
+#Region "Procedures"
+    Private Sub SendEnterOnGoogle()
+        Dim element As IWebElement 'Declare Chrome iWebElement
+        Try
+            element = driver2.FindElement(By.XPath("//*[@id='tsf']/div[2]/div/div[1]/div/div[1]/input")) 'Try to find element
+            element.SendKeys(Keys.Enter) 'If element is present, send enter key
+        Catch ex As Exception
+            element = driver2.FindElement(By.XPath("//*[@id='tsf']/div[2]/div[1]/div[1]/div/div[2]/input")) 'Try to find element again
+            element.SendKeys(Keys.Enter) 'If element is present, send enter key
+        End Try
+    End Sub
+    Private Sub QuitGoogleThread()
+        driver2.Dispose() 'Dispose Chrome instance
+        driver2.Quit() 'Quit Chrome instance
+        sql.DBCon.Close() 'Close SQL connection
+        ThreadWorking = False 'Thread not working
+        ThreadInfo = "" 'Thread info is now nothing
+    End Sub
     Private Sub BlackListEntry(ByVal BName As String, ByVal BWebsite As String)
-        Dim BWebsiteExists As Boolean
+        'This sub adds contact to the database, in case we want to blacklist it (we don't need it)
+        Dim BWebsiteExists As Boolean 'Specify if website exists
 
-        Dim BNameExists As Boolean = CheckBName(BName)
-        If Not BWebsite = "" Then BWebsiteExists = CheckDuplicateWebsite(BWebsite)
+        Dim BNameExists As Boolean = CheckBName(BName) 'Check if business name exists in the database
+        If Not BWebsite = "" Then BWebsiteExists = CheckDuplicateWebsite(BWebsite) 'Check if website exists in the database
 
-        If BNameExists = False Then
-            sql.AddParam("@EN", BName)
-            sql.ExecQuery("INSERT INTO bDuplicateNames(bnames) VALUES(@EN);")
+        If BNameExists = False Then 'If business name does not exist...
+            sql.AddParam("@EN", BName) 'Add SQL parameter
+            sql.ExecQuery("INSERT INTO bDuplicateNames(bnames) VALUES(@EN);") 'Insert into duplicate database
         End If
 
-        If BWebsiteExists = False Then
-            sql.AddParam("@EN", BWebsite)
-            sql.ExecQuery("INSERT INTO bDuplicateWebsites(bwebsites) VALUES(@EN);")
+        If BWebsiteExists = False Then 'If business website does not exist...
+            sql.AddParam("@EN", BWebsite) 'Add SQL parameter
+            sql.ExecQuery("INSERT INTO bDuplicateWebsites(bwebsites) VALUES(@EN);") 'Insert into duplicate database
         End If
-
     End Sub
-
     Private Sub SaveIntoDatabase(ByVal BName, ByVal BAddress, ByVal BPhone, ByVal BWebsite, ByVal EleIndustry)
+        'This sub adds data to the bcontacts table
         Dim PiD As String = "NONE"
-
+        'Add multiple parameters
         sql.AddParam("@piD", PiD)
         sql.AddParam("@EN", BName)
         sql.AddParam("@EA", BAddress)
@@ -353,8 +306,9 @@ Public Class GoogleThread
         sql.ExecQuery("INSERT INTO bcontacts(bplaceid, bname, bphone, baddress, bwebsite, btype) VALUES(@piD, @EN, @EP, @EA, @EW, @EI);")
     End Sub
     Private Sub SaveIntoOTDatabase(ByVal BName, ByVal BAddress, ByVal BPhone, ByVal BWebsite, ByVal EleIndustry)
+        'This sub adds data to the bcontactsOT table, which are all contacts from different towns & areas. We might use them later.
         Dim PiD As String = "NONE"
-
+        'Add multiple parameters
         sql.AddParam("@piD", PiD)
         sql.AddParam("@EN", BName)
         sql.AddParam("@EA", BAddress)
@@ -365,338 +319,38 @@ Public Class GoogleThread
         'Execute query - Insert results into the database
         sql.ExecQuery("INSERT INTO bcontactsOT(bplaceid, bname, bphone, baddress, bwebsite, btype) VALUES(@piD, @EN, @EP, @EA, @EW, @EI);")
     End Sub
-
-
-    Private Function GetStringBeforeOrAfter(ByVal TString As String, ByVal TSeparator As String, ByVal TLeft As Boolean, ByVal TRight As Boolean)
-        Dim StringOnTheRight As String
-        Dim StringOnTheLeft As String
-
-        Try
-            Dim original As String = TString : Dim cut_at As String = TSeparator : Dim stringSeparators() As String = {cut_at} : Dim split = original.Split(stringSeparators, 2, StringSplitOptions.RemoveEmptyEntries)
-            StringOnTheRight = split(1)
-            StringOnTheLeft = split(0)
-        Catch ex As Exception
-            Return False
-        End Try
-
-        If TLeft = True Then Return StringOnTheLeft
-
-        If TRight = True Then Return StringOnTheRight
-
-        If TLeft = False And TRight = False Then Return False
-
-        Return False
-    End Function
-
-    Private Function ReturnMatchedURLS(ByVal outerHTML As String, ByVal RequestMoreDetails As Boolean)
-        Dim oHTML As String = outerHTML
-        Dim MappedUrlList As Boolean = RequestMoreDetails
-
-        Dim LinkURLList As New ArrayList
-
-        Dim LinksRTB As New RichTextBox
-
-        Dim links As MatchCollection = Regex.Matches(oHTML, "<a.*?href=""(.*?)"".*?>(.*?)</a>")
-        For Each match As Match In links
-            ' Dim dr As DataRow = dt.NewRow
-            Dim matchUrl As String = match.Groups(1).Value
-            'Ignore all anchor links
-            If matchUrl.StartsWith("#") Then Continue For
-            'Ignore all javascript calls
-            If matchUrl.ToLower.StartsWith("javascript:") Then Continue For
-            'Ignore all email links
-            If matchUrl.ToLower.StartsWith("mailto:") Then Continue For
-
-            'For internal links, build the url mapped to the base address
-            If Not matchUrl.StartsWith("http://") And Not matchUrl.StartsWith("https://") Then matchUrl = MapUrl(driver2.Url.ToString, matchUrl).Replace("&amp;", "&")
-
-            LinkURLList.Add(matchUrl)
-
-            LinksRTB.AppendText(matchUrl & " - " & match.Groups(2).Value.Replace("&amp;", "&") & Environment.NewLine)
-        Next
-
-        If MappedUrlList = False Then If LinkURLList.Count > 0 Then Return LinkURLList.Item(0) Else Return Nothing Else If Not LinksRTB.Text = "" Then Return LinksRTB.Text Else Return Nothing
-    End Function
-
-    Private Function IsTownOnTheList(ByVal s)
-        CityarrayNew.Add("Danbury,")
-        CityarrayNew.Add("Darien,")
-        CityarrayNew.Add("Milford,")
-        CityarrayNew.Add("New Canaan,")
-        CityarrayNew.Add("Newtown,")
-        CityarrayNew.Add("Norwalk,")
-        CityarrayNew.Add("Ridgefield,")
-        CityarrayNew.Add("Stamford,")
-        CityarrayNew.Add("Westport,")
-
-        For Each value As String In CityarrayNew
-            If s.Contains(value) Then Return True
-        Next
-        Return False
-    End Function
-    Public Function IsCleanTownOnTheList(ByVal s As String, Optional ReturnCityName As Boolean = False)
-        Dim CityarrayNew2 As New ArrayList From {
-            "danbury",
-            "darien",
-            "milford",
-            "new canaan",
-            "newtown",
-            "norwalk",
-            "ridgefield",
-            "stamford",
-            "westport"
-        }
-
-        For Each value As String In CityarrayNew2
-            If s.ToLower.Contains(value.ToLower) Then
-                If ReturnCityName = True Then Return value Else Return True
-            End If
-        Next
-        Return False
-    End Function
-
-    Private Function CheckDoneKeyword(ByVal line As Object)
-        sql.AddParam("@bkeyword", line)
-        sql.ExecQuery("SELECT * FROM GoogleDoneKeywords WHERE keywords LIKE @bkeyword;")
-
-        If sql.RecordCount = 0 Then Return False Else Return True
-    End Function
-    Private Function CheckPendingKeyword(ByVal line As String, ByVal ExceptKeyword As String)
-        If Not line.ToLower = ExceptKeyword.ToLower Then
-            sql.AddParam("@bkeyword", line)
-            sql.ExecQuery("SELECT * FROM PendingKeywords WHERE BKeywords LIKE @bkeyword;")
-
-            If sql.RecordCount = 0 Then Return False Else Return True
-        Else
-            Return False
-        End If
-    End Function
-    Private Function CheckBName(ByVal BusinessName)
-        Dim BName As String = BusinessName
-
-        Dim TempBName As String = BName
-        If ReturnIfNameIsPresent(TempBName) = True Then Return True
-
-        TempBName = TempBName.Replace(" Co Inc", "").Replace(" Co. Inc.", "").Replace(", LLC", "").Replace(", Inc.", "").Replace(" Inc.", "").Replace(" LLC", "").Replace(" INC", "").Replace(" llc", "").Replace(" Inc", "").Replace(" LLC.", "").Replace(",Inc.", "").Replace(" Inc", "").Replace(" Ltd", "")
-        If ReturnIfNameIsPresent(TempBName) = True Then Return True
-
-
-        If TempBName.Contains("&") Then
-            TempBName = TempBName.Replace("&", "and")
-            If ReturnIfNameIsPresent(TempBName) = True Then Return True
-        ElseIf TempBName.Contains("and") Then
-            TempBName = TempBName.Replace("and", "&")
-            If ReturnIfNameIsPresent(TempBName) = True Then Return True
-        End If
-
-
-        If TempBName.Contains("’") Then
-            TempBName = TempBName.Replace("’", "'")
-            If ReturnIfNameIsPresent(TempBName) = True Then Return True
-        ElseIf TempBName.Contains("'") Then
-            TempBName = TempBName.Replace("'", "’")
-            If ReturnIfNameIsPresent(TempBName) = True Then Return True
-        End If
-
-
-        If TempBName.Contains("’s") Then
-            TempBName = TempBName.Replace("’s", "s")
-            If ReturnIfNameIsPresent(TempBName) = True Then Return True
-        ElseIf TempBName.Contains("'s") Then
-            TempBName = TempBName.Replace("'s", "s")
-            If ReturnIfNameIsPresent(TempBName) = True Then Return True
-        End If
-
-        Return False
-
-    End Function
-
-    Private Function ReturnIfNameIsPresent(ByVal BusinessName)
-        Dim IsDuplicate As Boolean
-        sql.AddParam("@bname", BusinessName)
-        sql.ExecQuery("SELECT * FROM bcontacts WHERE bname LIKE @bname;")
-        If sql.RecordCount = 0 Then IsDuplicate = False Else IsDuplicate = True
-
-        If IsDuplicate = True Then Return True
-
-        sql.AddParam("@bname", BusinessName)
-        sql.ExecQuery("SELECT * FROM bcontactsOT WHERE bname LIKE @bname;")
-        If sql.RecordCount = 0 Then IsDuplicate = False Else IsDuplicate = True
-
-        If IsDuplicate = True Then Return True
-
-        sql.AddParam("@bname", BusinessName)
-        sql.ExecQuery("SELECT * FROM bDuplicateNames WHERE bnames LIKE @bname;")
-        If sql.RecordCount = 0 Then IsDuplicate = False Else IsDuplicate = True
-
-        If IsDuplicate = True Then Return True Else Return False
-    End Function
-
-    Private Function CheckDuplicateWebsite(ByVal BusinessWebsite As String)
-        If BusinessWebsite = "" Then Return True
-
-        Dim IsDuplicate As Boolean = False
-
-        sql.AddParam("@bweb", BusinessWebsite.ToLower)
-        sql.ExecQuery("SELECT * FROM bDuplicateWebsites WHERE bwebsites LIKE @bweb;")
-        If sql.RecordCount = 0 Then IsDuplicate = False Else IsDuplicate = True
-
-        If IsDuplicate = True Then Return True
-
-        sql.AddParam("@bweb", BusinessWebsite.ToLower)
-        sql.ExecQuery("SELECT * FROM bcontactsOT WHERE bwebsite LIKE @bweb;")
-        If sql.RecordCount = 0 Then IsDuplicate = False Else IsDuplicate = True
-
-        If IsDuplicate = True Then Return True
-
-        sql.AddParam("@bweb", BusinessWebsite.ToLower)
-        sql.ExecQuery("SELECT * FROM bcontacts WHERE bwebsite LIKE @bweb;")
-        If sql.RecordCount = 0 Then IsDuplicate = False Else IsDuplicate = True
-
-        If IsDuplicate = True Then Return True Else Return False
-
-    End Function
-
-
-    Private Function WaitForXPathElement(ByVal DElement As Object)
-        Dim element As IWebElement
-        Dim ThreadSleepCount As Integer = 0
-
-        Dim ElementFound As Boolean = False
-        Try
-            Do
-                Thread.Sleep(1000)
-                ThreadSleepCount += 1
-
-                If ThreadSleepCount = 10 Then Return False
-
-                element = driver2.FindElement(By.XPath(DElement))
-                ElementFound = True
-
-            Loop Until ElementFound = True
-        Catch ex As Exception
-        End Try
-
-        If ElementFound = True Then Return True Else Return False
-
-    End Function
-    Private Function WaitForClassElement(ByVal DElement As Object)
-        Dim element As IWebElement
-        Dim ThreadSleepCount As Integer = 0
-
-        Dim ElementFound As Boolean = False
-        Try
-            Do
-                Thread.Sleep(1000)
-                ThreadSleepCount += 1
-
-                If ThreadSleepCount = 10 Then Return False
-
-                element = driver2.FindElement(By.ClassName(DElement))
-                ElementFound = True
-
-            Loop Until ElementFound = True
-        Catch ex As Exception
-        End Try
-
-        If ElementFound = True Then Return True Else Return False
-
-    End Function
-    Private Function WaitForIDElement(ByVal DElement As Object)
-        Dim element As IWebElement
-        Dim ThreadSleepCount As Integer = 0
-
-        Dim ElementFound As Boolean = False
-        Try
-            Do
-                Thread.Sleep(1000)
-                ThreadSleepCount += 1
-
-                If ThreadSleepCount = 10 Then Return False
-
-                element = driver2.FindElement(By.Id(DElement))
-                ElementFound = True
-
-            Loop Until ElementFound = True
-        Catch ex As Exception
-        End Try
-
-        If ElementFound = True Then Return True Else Return False
-
-    End Function
-
-    Public Function ExtractData(ByRef pHTML As String, ByRef pSearchStart As String, ByRef pSearchEnd As String, Optional ByRef pSearchSub As String = "") As String
-        Try
-            Dim lonPhrasePos1 As Integer
-            Dim lonPhrasePos2 As Integer
-
-            ExtractData = ""
-            ' Look for the search phrase. If not found, exit this function.
-            lonPhrasePos1 = pHTML.ToUpper.IndexOf(pSearchStart.ToUpper)
-            If lonPhrasePos1 = 0 Then Exit Function
-            ' If the optional pSearchSub parameter has been provided, find the string AFTER the
-            ' first search string's location.
-            If pSearchSub <> "" Then
-                lonPhrasePos1 = pHTML.IndexOf(pSearchSub.ToUpper, lonPhrasePos1 + 1)
-                If lonPhrasePos1 = 0 Then Exit Function
-            End If
-            ' Now look for the ending search phrase. Everything in-between gets returned as the value
-            ' of this function. If the ending search phrase is not found, exit this function.
-            lonPhrasePos2 = pHTML.ToUpper.IndexOf(pSearchEnd.ToUpper, lonPhrasePos1)
-            If lonPhrasePos2 = 0 Or lonPhrasePos1 = lonPhrasePos2 Then Exit Function
-
-            ' Extract the data between the two given search strings.
-            If pSearchSub <> "" Then
-                ExtractData = pHTML.Substring(lonPhrasePos1 + Len(pSearchSub), lonPhrasePos2 - (lonPhrasePos1 + Len(pSearchSub)))
-            Else
-                ExtractData = pHTML.Substring(lonPhrasePos1 + Len(pSearchStart), lonPhrasePos2 - (lonPhrasePos1 + Len(pSearchStart)))
-            End If
-        Catch ex As Exception
-
-        End Try
-
-    End Function
-
-    Private Sub SendEnterOnGoogle()
-        Dim element As IWebElement
-        Try
-            element = driver2.FindElement(By.XPath("//*[@id='tsf']/div[2]/div/div[1]/div/div[1]/input"))
-            element.SendKeys(Keys.Enter)
-        Catch ex As Exception
-            element = driver2.FindElement(By.XPath("//*[@id='tsf']/div[2]/div[1]/div[1]/div/div[2]/input"))
-            element.SendKeys(Keys.Enter)
-        End Try
+    Private Sub BWorker_RunWorkerCompleted(ByVal sender As Object, ByVal e As RunWorkerCompletedEventArgs) Handles BWorker.RunWorkerCompleted
+        QuitGoogleThread() 'Thread finished with scraping >> quit
     End Sub
+#End Region
 
+#Region "Functions"
     Private Function EnterKeywordOnGoogle(ByVal Keyword As String)
-        Dim element As IWebElement
-        driver2.Navigate.GoToUrl("https://google.com")
+        Dim element As IWebElement 'Declare Chrome iWebElement
+        driver2.Navigate.GoToUrl("https://google.com") 'Navigate to google.com
         Try
-            element = driver2.FindElement(By.XPath("//*[@id='tsf']/div[2]/div/div[1]/div/div[1]/input"))
-            element.Clear()
-            element.SendKeys(Keyword.ToLower)
+            element = driver2.FindElement(By.XPath("//*[@id='tsf']/div[2]/div/div[1]/div/div[1]/input")) 'Find element
+            element.Clear() 'Clear it
+            element.SendKeys(Keyword.ToLower) 'Enter keyword
 
-            Thread.Sleep(3000)
+            Thread.Sleep(3000) 'Sleep for 3 seconds
 
-            element = driver2.FindElement(By.XPath("//*[@id='tsf']/div[2]/div[1]/div[2]/div[2]/ul"))
-            Return element.Text
-
+            element = driver2.FindElement(By.XPath("//*[@id='tsf']/div[2]/div[1]/div[2]/div[2]/ul")) 'Find element dropdown list
+            Return element.Text 'Return list
         Catch ex As Exception
-            element = driver2.FindElement(By.XPath("//*[@id='tsf']/div[2]/div[1]/div[1]/div/div[2]/input"))
-            element.Clear()
-            element.SendKeys(Keyword.ToLower)
+            element = driver2.FindElement(By.XPath("//*[@id='tsf']/div[2]/div[1]/div[1]/div/div[2]/input")) 'On error, try to find element again
+            element.Clear() 'If element is present, clear it...
+            element.SendKeys(Keyword.ToLower) 'And enter keyword
 
-            Thread.Sleep(3000)
+            Thread.Sleep(3000) 'Sleep for 3 seconds
 
-            element = driver2.FindElement(By.XPath("//*[@id='tsf']/div[2]/div[1]/div[2]/div[2]/ul"))
-            Return element.Text
+            element = driver2.FindElement(By.XPath("//*[@id='tsf']/div[2]/div[1]/div[2]/div[2]/ul")) 'Find element dropdown list
+            Return element.Text 'Return list
         End Try
-
-        Return "NONE"
+        Return "" 'If no dropdown is present, return nothing
     End Function
-
-
     Private Function ContainBannedWords(ByVal matchUrl)
+        'If match URL contains some of these words, discard it
         Dim BWords As New ArrayList From {
             "webcache.googleusercontent.com",
             "=related:",
@@ -711,13 +365,9 @@ Public Class GoogleThread
         Next
         Return False
     End Function
-    Private Function IsGMBLink(ByVal link)
-        If link.Contains("https://www.google.com/search?q=") Then If Not link.Contains("=related:") Then If link.Contains("rldoc") Then Return True Else Return False Else Return False Else Return False
-    End Function
-
     Public Function MapUrl(ByVal baseAddress As String, ByVal relativePath As String) As String
         Dim u As New Uri(baseAddress)
-
+        'Map URL according to website host - some websites shows only pages without hostname. This function returns pages combined with hostname address.
         If relativePath = "./" Then relativePath = "/"
 
         If relativePath.StartsWith("/") Then
@@ -737,4 +387,225 @@ Public Class GoogleThread
             Return baseAddress + "/" + relativePath
         End If
     End Function
+    Public Function ExtractData(ByRef pHTML As String, ByRef pSearchStart As String, ByRef pSearchEnd As String, Optional ByRef pSearchSub As String = "") As String
+        Try
+            Dim lonPhrasePos1 As Integer, lonPhrasePos2 As Integer
+            ExtractData = ""
+            ' Look for the search phrase. If not found, exit this function.
+            lonPhrasePos1 = pHTML.ToUpper.IndexOf(pSearchStart.ToUpper)
+            If lonPhrasePos1 = 0 Then Exit Function
+            ' If the optional pSearchSub parameter has been provided, find the string AFTER the
+            ' first search string's location.
+            If pSearchSub <> "" Then
+                lonPhrasePos1 = pHTML.IndexOf(pSearchSub.ToUpper, lonPhrasePos1 + 1)
+                If lonPhrasePos1 = 0 Then Exit Function
+            End If
+            ' Now look for the ending search phrase. Everything in-between gets returned as the value
+            ' of this function. If the ending search phrase is not found, exit this function.
+            lonPhrasePos2 = pHTML.ToUpper.IndexOf(pSearchEnd.ToUpper, lonPhrasePos1)
+            If lonPhrasePos2 = 0 Or lonPhrasePos1 = lonPhrasePos2 Then Exit Function
+            ' Extract the data between the two given search strings.
+            If pSearchSub <> "" Then
+                ExtractData = pHTML.Substring(lonPhrasePos1 + Len(pSearchSub), lonPhrasePos2 - (lonPhrasePos1 + Len(pSearchSub)))
+            Else
+                ExtractData = pHTML.Substring(lonPhrasePos1 + Len(pSearchStart), lonPhrasePos2 - (lonPhrasePos1 + Len(pSearchStart)))
+            End If
+        Catch ex As Exception
+        End Try
+    End Function
+    Private Function IsTownOnTheList(ByVal s)
+        'Add town list
+        CityarrayNew.Add("Danbury,")
+        CityarrayNew.Add("Darien,")
+        CityarrayNew.Add("Milford,")
+        CityarrayNew.Add("New Canaan,")
+        CityarrayNew.Add("Newtown,")
+        CityarrayNew.Add("Norwalk,")
+        CityarrayNew.Add("Ridgefield,")
+        CityarrayNew.Add("Stamford,")
+        CityarrayNew.Add("Westport,")
+
+        'Check if this address contains town from the list above
+        For Each value As String In CityarrayNew
+            If s.Contains(value) Then Return True
+        Next
+        Return False
+    End Function
+    Public Function IsCleanTownOnTheList(ByVal s As String, Optional ReturnCityName As Boolean = False)
+        'Check if town is on the list
+        Dim CityarrayNew2 As New ArrayList From {
+            "danbury",
+            "darien",
+            "milford",
+            "new canaan",
+            "newtown",
+            "norwalk",
+            "ridgefield",
+            "stamford",
+            "westport"
+        }
+
+        For Each value As String In CityarrayNew2
+            If s.ToLower.Contains(value.ToLower) Then
+                If ReturnCityName = True Then Return value Else Return True
+            End If
+        Next
+        Return False
+    End Function
+    Private Function CheckDoneKeyword(ByVal line As Object)
+        sql.AddParam("@bkeyword", line)
+        sql.ExecQuery("SELECT * FROM GoogleDoneKeywords WHERE keywords LIKE @bkeyword;")
+        'Check if keyword already exists in the database
+        If sql.RecordCount = 0 Then Return False Else Return True
+    End Function
+    Private Function CheckPendingKeyword(ByVal line As String, ByVal ExceptKeyword As String)
+        'Check if keyword already exists in the database
+        If Not line.ToLower = ExceptKeyword.ToLower Then
+            sql.AddParam("@bkeyword", line)
+            sql.ExecQuery("SELECT * FROM PendingKeywords WHERE BKeywords LIKE @bkeyword;")
+
+            If sql.RecordCount = 0 Then Return False Else Return True
+        Else
+            Return False
+        End If
+    End Function
+    Private Function CheckBName(ByVal BusinessName)
+        Dim BName As String = BusinessName 'Declare variable to get business name
+
+        Dim TempBName As String = BName 'Temporary business name
+        If ReturnIfNameIsPresent(TempBName) = True Then Return True 'If business name exists in the database, return true
+
+        TempBName = TempBName.Replace(" Co Inc", "").Replace(" Co. Inc.", "").Replace(", LLC", "").Replace(", Inc.", "").Replace(" Inc.", "").Replace(" LLC", "").Replace(" INC", "").Replace(" llc", "").Replace(" Inc", "").Replace(" LLC.", "").Replace(",Inc.", "").Replace(" Inc", "").Replace(" Ltd", "") 'If not, format business name and try again
+        If ReturnIfNameIsPresent(TempBName) = True Then Return True 'If business name exists in the database, return true
+
+        If TempBName.Contains("&") Then 'More formatting
+            TempBName = TempBName.Replace("&", "and")
+            If ReturnIfNameIsPresent(TempBName) = True Then Return True 'If business name exists in the database, return true
+        ElseIf TempBName.Contains("and") Then
+            TempBName = TempBName.Replace("and", "&")
+            If ReturnIfNameIsPresent(TempBName) = True Then Return True 'If business name exists in the database, return true
+        End If
+
+        If TempBName.Contains("’") Then 'More formatting
+            TempBName = TempBName.Replace("’", "'")
+            If ReturnIfNameIsPresent(TempBName) = True Then Return True 'If business name exists in the database, return true
+        ElseIf TempBName.Contains("'") Then
+            TempBName = TempBName.Replace("'", "’")
+            If ReturnIfNameIsPresent(TempBName) = True Then Return True 'If business name exists in the database, return true
+        End If
+
+        If TempBName.Contains("’s") Then 'More formatting
+            TempBName = TempBName.Replace("’s", "s")
+            If ReturnIfNameIsPresent(TempBName) = True Then Return True 'If business name exists in the database, return true
+        ElseIf TempBName.Contains("'s") Then
+            TempBName = TempBName.Replace("'s", "s")
+            If ReturnIfNameIsPresent(TempBName) = True Then Return True 'If business name exists in the database, return true
+        End If
+
+        Return False 'Business name is not found in the database, so return false
+    End Function
+    Private Function ReturnIfNameIsPresent(ByVal BusinessName)
+        Dim IsDuplicate As Boolean 'Variable to determine if business exists in the database
+        sql.AddParam("@bname", BusinessName) 'Add parameter
+        sql.ExecQuery("SELECT * FROM bcontacts WHERE bname LIKE @bname;") 'Execute SQL query
+        If sql.RecordCount = 0 Then IsDuplicate = False Else IsDuplicate = True 'If business exists in the database, set variable to true
+
+        If IsDuplicate = True Then Return True 'If business is found in the database, return true
+
+        sql.AddParam("@bname", BusinessName) 'Add parameter
+        sql.ExecQuery("SELECT * FROM bcontactsOT WHERE bname LIKE @bname;") 'Execute SQL query
+        If sql.RecordCount = 0 Then IsDuplicate = False Else IsDuplicate = True 'If business exists in the database, set variable to true
+
+        If IsDuplicate = True Then Return True 'If business is found in the database, return true
+
+        sql.AddParam("@bname", BusinessName) 'Add parameter
+        sql.ExecQuery("SELECT * FROM bDuplicateNames WHERE bnames LIKE @bname;") 'Execute SQL query
+        If sql.RecordCount = 0 Then IsDuplicate = False Else IsDuplicate = True 'If business exists in the database, set variable to true
+
+        If IsDuplicate = True Then Return True Else Return False 'If business is found in the database, return true
+    End Function
+    Private Function CheckDuplicateWebsite(ByVal BusinessWebsite As String)
+        If BusinessWebsite = "" Then Return True 'If business website is empty, return true
+
+        Dim IsDuplicate As Boolean 'Variable to determine if website already exists in the database
+
+        sql.AddParam("@bweb", BusinessWebsite.ToLower) 'Add parameter
+        sql.ExecQuery("SELECT * FROM bDuplicateWebsites WHERE bwebsites LIKE @bweb;") 'Execute SQL query
+        If sql.RecordCount = 0 Then IsDuplicate = False Else IsDuplicate = True 'If website exists in the database, set boolean to true
+
+        If IsDuplicate = True Then Return True 'If website exists in the database, return true. If not, continue
+
+        sql.AddParam("@bweb", BusinessWebsite.ToLower) 'Add parameter
+        sql.ExecQuery("SELECT * FROM bcontactsOT WHERE bwebsite LIKE @bweb;") 'Execute SQL query
+        If sql.RecordCount = 0 Then IsDuplicate = False Else IsDuplicate = True 'If website exists in the database, set boolean to true
+
+        If IsDuplicate = True Then Return True 'If website exists in the database, return true. If not, continue
+
+        sql.AddParam("@bweb", BusinessWebsite.ToLower) 'Add parameter
+        sql.ExecQuery("SELECT * FROM bcontacts WHERE bwebsite LIKE @bweb;") 'Execute SQL query
+        If sql.RecordCount = 0 Then IsDuplicate = False Else IsDuplicate = True 'If website exists in the database, set boolean to true
+
+        If IsDuplicate = True Then Return True Else Return False 'If website exists in the database, return true
+    End Function
+    Private Function WaitForElement(ByVal element As String, ByVal elementMechanism As String)
+        Dim TimeOut As Integer = 0 'Set timeout integer
+        Do
+            If TimeOut > 15 Then Return False 'If TimeOut is > than 15, element is not loaded
+
+            If elementMechanism = "ID" Then If Not driver2.FindElements(By.Id(element)).Count = 0 Then Return True 'If there are more than 1 element of type "ID", return True
+            If elementMechanism = "Class" Then If Not driver2.FindElements(By.ClassName(element)).Count = 0 Then Return True 'If there are more than 1 element of type "Class", return True
+            If elementMechanism = "xPath" Then If Not driver2.FindElements(By.XPath(element)).Count = 0 Then Return True 'If there are more than 1 element of type "xPath", return True
+
+            Thread.Sleep(1000) : TimeOut += 1 'Sleep for 1000ms
+        Loop
+    End Function
+    Private Function GetStringBeforeOrAfter(ByVal TString As String, ByVal TSeparator As String, ByVal TLeft As Boolean, ByVal TRight As Boolean)
+        Dim StringOnTheRight As String, StringOnTheLeft As String 'Specify string on the right and string on the left
+        Try
+            Dim original As String = TString : Dim cut_at As String = TSeparator : Dim stringSeparators() As String = {cut_at} : Dim split = original.Split(stringSeparators, 2, StringSplitOptions.RemoveEmptyEntries)
+            StringOnTheRight = split(1)
+            StringOnTheLeft = split(0)
+        Catch ex As Exception
+            Return False
+        End Try
+
+        If TLeft = True Then Return StringOnTheLeft 'Return string from the left
+
+        If TRight = True Then Return StringOnTheRight 'Return string from the right
+
+        If TLeft = False And TRight = False Then Return False 'Return false in case user did not specify right or left
+
+        Return False
+    End Function
+    Private Function ReturnMatchedURLS(ByVal outerHTML As String, ByVal RequestMoreDetails As Boolean)
+        Dim oHTML As String = outerHTML 'Get HTML of the page
+        Dim MappedUrlList As Boolean = RequestMoreDetails
+
+        Dim LinkURLList As New ArrayList, LinksRTB As New RichTextBox
+
+        Dim links As MatchCollection = Regex.Matches(oHTML, "<a.*?href=""(.*?)"".*?>(.*?)</a>")
+        For Each match As Match In links
+            Dim matchUrl As String = match.Groups(1).Value
+            If matchUrl.StartsWith("#") Then Continue For 'Ignore all anchor links
+            If matchUrl.ToLower.StartsWith("javascript:") Then Continue For 'Ignore all javascript calls
+            If matchUrl.ToLower.StartsWith("mailto:") Then Continue For 'Ignore all email links
+            If Not matchUrl.StartsWith("http://") And Not matchUrl.StartsWith("https://") Then matchUrl = MapUrl(driver2.Url.ToString, matchUrl).Replace("&amp;", "&") 'For internal links, build the url mapped to the base address
+            LinkURLList.Add(matchUrl) 'Add URL to the list
+            LinksRTB.AppendText(matchUrl & " - " & match.Groups(2).Value.Replace("&amp;", "&") & Environment.NewLine) 'Add URL along with link text of the URL
+        Next
+
+        If MappedUrlList = False Then If LinkURLList.Count > 0 Then Return LinkURLList.Item(0) Else Return Nothing Else If Not LinksRTB.Text = "" Then Return LinksRTB.Text Else Return Nothing
+    End Function
+    Public Function FormatWebsite(ByVal BusinessWebsite As String)
+        BusinessWebsite = BusinessWebsite.Replace("https://www.", "").Replace("http://www.", "").Replace("https://", "").Replace("http://", "").Replace("www.", "") 'Replace unnecesary values from string
+        Dim TempBusinessWebsite As String = BusinessWebsite
+        If TempBusinessWebsite.Contains("/") Then BusinessWebsite = TempBusinessWebsite.Substring(0, TempBusinessWebsite.IndexOf("/")) 'Format string
+        BusinessWebsite = BusinessWebsite.Replace("/", "")
+
+        Return BusinessWebsite 'Return formated string
+    End Function
+
+
+#End Region
+
 End Class
