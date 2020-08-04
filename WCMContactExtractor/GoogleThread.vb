@@ -22,7 +22,7 @@ Public Class GoogleThread
         optionOn.AddArgument("start-maximized") 'Instruct Chrome to run in maximized mode
         optionOn.AddArgument("--disable-infobars") 'Disable infobars
         optionOn.AddArgument("--lang=en-GB") 'Set default language to English
-        optionOn.AddArguments("headless") 'Hide Chrome browser from the user. Headless mode means Chrome will run in the background
+        'optionOn.AddArguments("headless") 'Hide Chrome browser from the user. Headless mode means Chrome will run in the background
         optionOn.AddUserProfilePreference("profile.default_content_setting_values.images", 2) 'Disable or enable images
         optionOn.AddArgument("--blink-settings=imagesEnabled=false") 'Disable or enable images
 
@@ -106,7 +106,7 @@ Public Class GoogleThread
 
         Do 'Do all this until app can't find "Next" button
 
-            Do : Loop Until WaitForElement("section-result", "Class") = True 'Wait for the page to load
+            Do : Loop Until WaitForElement("section-result", "Class", 15) = True 'Wait for the page to load
 
             Dim elementTexts As List(Of String) = New List(Of String)(driver2.FindElements(By.ClassName("section-result-content")).[Select](Function(iw) iw.GetAttribute("outerHTML"))) 'Get all elements with contacts data
             Dim ContactID As Integer = 1 'Variable to determine contact ID
@@ -139,7 +139,7 @@ Public Class GoogleThread
                         BusinessWebsite = FormatWebsite(TempWebsite) 'Format website
 
                         If Not CheckDuplicateWebsite(BusinessWebsite) = True Then 'If this website is not in the database, proceed with scraping
-                            If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath") = True Then 'If contact details are loaded in the browser
+                            If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath", 15) = True Then 'If contact details are loaded in the browser
                                 element = driver2.FindElement(By.Id("pane")) 'Find main ID element
                                 Dim BusRTB As New RichTextBox 'Variable to store outerHTML of the element
                                 BusRTB.Text = element.GetAttribute("outerHTML") 'Set element outerHTML to the RTB variable
@@ -166,7 +166,7 @@ Public Class GoogleThread
                     End If
 
                     If BusinessWebsite = "" Then 'If business website is nothing...
-                        If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath") = True Then 'If contact details are loaded in the browser
+                        If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath", 15) = True Then 'If contact details are loaded in the browser
                             element = driver2.FindElement(By.Id("pane")) 'Find main ID element
                             Dim BusRTB As New RichTextBox 'Variable to store outerHTML of the element
                             BusRTB.Text = element.GetAttribute("outerHTML") 'Set element outerHTML to the RTB variable
@@ -222,24 +222,25 @@ Public Class GoogleThread
                     End If
 
                     Thread.Sleep(3500) 'Wait for 3+ seconds
+                    If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath", 10) = True Then 'If "Back" button is present...
+                        Try
+                            element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span")) 'Find "Back" button element
+                            element.Click() 'Click on it
+                        Catch ex As Exception
+                            Thread.Sleep(5000) 'Wait for 5 seconds and try again
+                            element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span")) 'Find "Back" button element
+                            element.Click() 'Click on it
+                        End Try
 
-                    Try
-                        element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span")) 'Find "Back" button element
-                        element.Click() 'Click on it
-                    Catch ex As Exception
-                        Thread.Sleep(5000) 'Wait for 5 seconds and try again
-                        element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span")) 'Find "Back" button element
-                        element.Click() 'Click on it
-                    End Try
+                        BusinessName = BusinessName.Replace("&amp;", "&") 'Format contact name
+                        If BusinessAddress = "False" Then BusinessAddress = "" 'Format address
+                        If BusinessPhone = "False" Then BusinessPhone = "" 'Format phone
 
-                    BusinessName = BusinessName.Replace("&amp;", "&") 'Format contact name
-                    If BusinessAddress = "False" Then BusinessAddress = "" 'Format address
-                    If BusinessPhone = "False" Then BusinessPhone = "" 'Format phone
-
-                    If ShouldSaveEntry = True Then 'If we can save this contact...
-                        If IsTownOnTheList(BusinessAddress) = True Then SaveIntoDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") Else SaveIntoOTDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") 'Save into adequate database (this splits contacts from towns we're working on from others into different SQL tables)
-                    Else
-                        BlackListEntry(BusinessName, BusinessWebsite) 'If we can't save this contact for any reason, add this contact to duplicate tables
+                        If ShouldSaveEntry = True Then 'If we can save this contact...
+                            If IsTownOnTheList(BusinessAddress) = True Then SaveIntoDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") Else SaveIntoOTDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") 'Save into adequate database (this splits contacts from towns we're working on from others into different SQL tables)
+                        Else
+                            BlackListEntry(BusinessName, BusinessWebsite) 'If we can't save this contact for any reason, add this contact to duplicate tables
+                        End If
                     End If
                 End If
             Next
@@ -547,10 +548,10 @@ Public Class GoogleThread
 
         If IsDuplicate = True Then Return True Else Return False 'If website exists in the database, return true
     End Function
-    Private Function WaitForElement(ByVal element As String, ByVal elementMechanism As String)
+    Private Function WaitForElement(ByVal element As String, ByVal elementMechanism As String, ByVal SecondsToWait As Integer)
         Dim TimeOut As Integer = 0 'Set timeout integer
         Do
-            If TimeOut > 15 Then Return False 'If TimeOut is > than 15, element is not loaded
+            If TimeOut > SecondsToWait Then Return False 'If TimeOut is > than 15, element is not loaded
 
             If elementMechanism = "ID" Then If Not driver2.FindElements(By.Id(element)).Count = 0 Then Return True 'If there are more than 1 element of type "ID", return True
             If elementMechanism = "Class" Then If Not driver2.FindElements(By.ClassName(element)).Count = 0 Then Return True 'If there are more than 1 element of type "Class", return True
