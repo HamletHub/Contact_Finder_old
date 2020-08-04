@@ -1,10 +1,7 @@
 ﻿Public Class Form1
     Private Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click
         If Not RichTextBox1.Text = "" Then
-            If Not ComboBox1.SelectedItem = "" Then
-                FDoWork.Show()
-                Me.Hide()
-            End If
+            If Not ComboBox1.SelectedItem = "" Then FDoWork.Show() : Me.Hide() 'Show form
         End If
     End Sub
 
