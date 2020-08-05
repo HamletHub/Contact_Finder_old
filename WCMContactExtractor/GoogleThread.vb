@@ -46,7 +46,7 @@ Public Class GoogleThread
         optionOn.AddArgument("start-maximized") 'Instruct Chrome to run in maximized mode
         optionOn.AddArgument("--disable-infobars") 'Disable infobars
         optionOn.AddArgument("--lang=en-GB") 'Set default language to English
-        optionOn.AddArguments("headless") 'Hide Chrome browser from the user. Headless mode means Chrome will run in the background
+        'optionOn.AddArguments("headless") 'Hide Chrome browser from the user. Headless mode means Chrome will run in the background
         optionOn.AddUserProfilePreference("profile.default_content_setting_values.images", 2) 'Disable or enable images
         optionOn.AddArgument("--blink-settings=imagesEnabled=false") 'Disable or enable images
 
@@ -157,7 +157,7 @@ Public Class GoogleThread
                 End If
 
                 ContactID += 2 'First contact (starts at #3)
-                SaveLog("Google thread - Processing contact ID: " & ContactID)
+                SaveLog("**************** Google thread - Processing contact ID: " & ContactID & " ****************")
 
                 'Declare contact details variables
                 Dim BusinessName As String = "", FullBusinessName As String = "", BusinessAddress As String = "", BusinessPhone As String = "", TempWebsite As String = "", BusinessWebsite As String = ""
@@ -170,24 +170,78 @@ Public Class GoogleThread
 
                 SaveLog("Google thread - Processing contact name: " & BusinessName)
 
+                Dim ContactWindowOpened As Boolean = False
+
                 If CheckBName(BusinessName) = False Then 'If contact name does not exist in the database, we can open it and proceed with scraping
                     Try
-                        SaveLog("Google thread - Opening contact window")
-                        element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/div[4]/div[1]/div[" & ContactID.ToString & "]/div[1]")) 'Find contact element
-                        Thread.Sleep(1000) 'Wait for a second
-                        element.Click() 'Click on the contact
+                        SaveLog("Google thread - Opening contact window - Waiting for contact element to show up")
+                        If WaitForElement("//*[@id='pane']/div/div[1]/div/div/div[4]/div[1]/div[" & ContactID.ToString & "]/div[1]", "xPath", 15) = True Then
+                            element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/div[4]/div[1]/div[" & ContactID.ToString & "]/div[1]")) 'Find contact element
+                            Thread.Sleep(1000) 'Wait for a second
+                            element.Click() 'Click on the contact
+                            SaveLog("Google thread - Contact window openned")
+                            ContactWindowOpened = True
+                        Else
+                            SaveLog("Google thread - Element: //*[@id='pane']/div/div[1]/div/div/div[4]/div[1]/div[" & ContactID.ToString & "]/div[1] didn't show up! Trying different xPath")
+
+                            If WaitForElement("//*[@id='pane']/div/div[1]/div/div/div[2]/div[1]/div[" & ContactID.ToString & "]/div[1]", "xPath", 15) = True Then
+                                element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/div[2]/div[1]/div[" & ContactID.ToString & "]/div[1]")) 'Find contact element
+                                Thread.Sleep(1000) 'Wait for a second
+                                element.Click() 'Click on the contact
+                                SaveLog("Google thread - Contact window openned")
+                                ContactWindowOpened = True
+                            End If
+                        End If
                     Catch ex As Exception
                         SaveLog("Google thread - Failed to open contact window: " & ex.Message)
                     End Try
 
-                    If TempWebsite = "False" Then TempWebsite = "" 'If website is false, set it to nothing. This sometimes can happen when function does not find website, and then it returns "False" instead of nothing
+                    If ContactWindowOpened = True Then
 
-                    If Not TempWebsite = "" Then 'If website is not nothing...
-                        SaveLog("Google thread - " & BusinessName & " website found: " & TempWebsite)
-                        BusinessWebsite = FormatWebsite(TempWebsite) 'Format website
-                        SaveLog("Google thread - Formatted website: " & BusinessWebsite)
+                        If TempWebsite = "False" Then TempWebsite = "" 'If website is false, set it to nothing. This sometimes can happen when function does not find website, and then it returns "False" instead of nothing
 
-                        If Not CheckDuplicateWebsite(BusinessWebsite) = True Then 'If this website is not in the database, proceed with scraping
+                        If Not TempWebsite = "" Then 'If website is not nothing...
+                            SaveLog("Google thread - " & BusinessName & " website found: " & TempWebsite)
+                            BusinessWebsite = FormatWebsite(TempWebsite) 'Format website
+                            SaveLog("Google thread - Formatted website: " & BusinessWebsite)
+
+                            If Not CheckDuplicateWebsite(BusinessWebsite) = True Then 'If this website is not in the database, proceed with scraping
+                                If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath", 15) = True Then 'If contact details are loaded in the browser
+                                    element = driver2.FindElement(By.Id("pane")) 'Find main ID element
+                                    Dim BusRTB As New RichTextBox 'Variable to store outerHTML of the element
+                                    BusRTB.Text = element.GetAttribute("outerHTML") 'Set element outerHTML to the RTB variable
+                                    SaveLog("Google thread - Getting " & BusinessWebsite & " outerHTML")
+                                    Try
+                                        Dim RemoveLeft As New RichTextBox, RemoveRight As New RichTextBox 'RTBs to store text from the left and from the right
+
+                                        RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
+                                        RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
+                                        BusinessAddress = RemoveRight.Text 'String between is our contact address
+
+                                        SaveLog("Google thread - Contact address: " & BusinessAddress)
+
+                                        RemoveLeft.Text = "" 'Clear variable
+                                        RemoveRight.Text = "" 'Clear variable
+
+                                        RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
+                                        RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
+                                        BusinessPhone = RemoveRight.Text 'String between is our contact phone
+
+                                        SaveLog("Google thread - Contact phone: " & BusinessPhone)
+
+                                        ShouldSaveEntry = True 'All good - we can save this contact
+                                    Catch ex As Exception
+                                    End Try
+                                Else
+                                    SaveLog("Google thread - element xPath: //*[@id='pane']/div/div[1]/div/div/button/span not found")
+                                End If
+                            Else
+                                SaveLog("Google thread - " & BusinessWebsite & " already exists in the database")
+                            End If
+                        End If
+
+                        If BusinessWebsite = "" Then 'If business website is nothing...
+                            SaveLog("Google thread -" & BusinessName & " website not found")
                             If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath", 15) = True Then 'If contact details are loaded in the browser
                                 element = driver2.FindElement(By.Id("pane")) 'Find main ID element
                                 Dim BusRTB As New RichTextBox 'Variable to store outerHTML of the element
@@ -196,77 +250,17 @@ Public Class GoogleThread
                                 Try
                                     Dim RemoveLeft As New RichTextBox, RemoveRight As New RichTextBox 'RTBs to store text from the left and from the right
 
-                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
-                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
-                                    BusinessAddress = RemoveRight.Text 'String between is our contact address
+                                    SaveLog("Google thread - Still trying to find website")
 
-                                    SaveLog("Google thread - Contact address: " & BusinessAddress)
+                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Website: ", False, True) 'Get website string from the left
+                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get website string from the right
+                                    TempWebsite = RemoveRight.Text 'String between is our contact website
 
-                                    RemoveLeft.Text = "" 'Clear variable
-                                    RemoveRight.Text = "" 'Clear variable
+                                    If TempWebsite = "False" Then 'If TempWebsite is false, that means google did not provide website for this contact
+                                        SaveLog("Google thread - Website not found")
 
-                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
-                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
-                                    BusinessPhone = RemoveRight.Text 'String between is our contact phone
+                                        TempWebsite = "" 'Clear variable
 
-                                    SaveLog("Google thread - Contact phone: " & BusinessPhone)
-
-                                    ShouldSaveEntry = True 'All good - we can save this contact
-                                Catch ex As Exception
-                                End Try
-                            Else
-                                SaveLog("Google thread - element xPath: //*[@id='pane']/div/div[1]/div/div/button/span not found")
-                            End If
-                        Else
-                            SaveLog("Google thread - " & BusinessWebsite & " already exists in the database")
-                        End If
-                    End If
-
-                    If BusinessWebsite = "" Then 'If business website is nothing...
-                        SaveLog("Google thread -" & BusinessName & " website not found")
-                        If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath", 15) = True Then 'If contact details are loaded in the browser
-                            element = driver2.FindElement(By.Id("pane")) 'Find main ID element
-                            Dim BusRTB As New RichTextBox 'Variable to store outerHTML of the element
-                            BusRTB.Text = element.GetAttribute("outerHTML") 'Set element outerHTML to the RTB variable
-                            SaveLog("Google thread - Getting " & BusinessWebsite & " outerHTML")
-                            Try
-                                Dim RemoveLeft As New RichTextBox, RemoveRight As New RichTextBox 'RTBs to store text from the left and from the right
-
-                                SaveLog("Google thread - Still trying to find website")
-
-                                RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Website: ", False, True) 'Get website string from the left
-                                RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get website string from the right
-                                TempWebsite = RemoveRight.Text 'String between is our contact website
-
-                                If TempWebsite = "False" Then 'If TempWebsite is false, that means google did not provide website for this contact
-                                    SaveLog("Google thread - Website not found")
-
-                                    TempWebsite = "" 'Clear variable
-
-                                    RemoveLeft.Text = "" 'Clear variable
-                                    RemoveRight.Text = "" 'Clear variable
-
-                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
-                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
-                                    BusinessAddress = RemoveRight.Text 'String between is our contact address
-                                    SaveLog("Google thread - Contact address: " & BusinessAddress)
-
-                                    RemoveLeft.Text = "" 'Clear variable
-                                    RemoveRight.Text = "" 'Clear variable
-
-                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
-                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
-                                    BusinessPhone = RemoveRight.Text 'String between is our contact phone
-                                    SaveLog("Google thread - Contact phone: " & BusinessPhone)
-
-                                    ShouldSaveEntry = True 'All good - we can save this contact
-                                Else 'If TempWebsite is not False, that means google provided website for this contact
-                                    SaveLog("Google thread - " & BusinessName & " website found: " & TempWebsite)
-
-                                    BusinessWebsite = FormatWebsite(TempWebsite) 'Format the website
-                                    SaveLog("Google thread - Formatted website: " & BusinessWebsite)
-
-                                    If Not CheckDuplicateWebsite(BusinessWebsite) = True Then 'If this website is not in the database, proceed with scraping
                                         RemoveLeft.Text = "" 'Clear variable
                                         RemoveRight.Text = "" 'Clear variable
 
@@ -284,42 +278,70 @@ Public Class GoogleThread
                                         SaveLog("Google thread - Contact phone: " & BusinessPhone)
 
                                         ShouldSaveEntry = True 'All good - we can save this contact
-                                    Else
-                                        SaveLog("Google thread - " & BusinessWebsite & " already exists in the database")
+                                    Else 'If TempWebsite is not False, that means google provided website for this contact
+                                        SaveLog("Google thread - " & BusinessName & " website found: " & TempWebsite)
+
+                                        BusinessWebsite = FormatWebsite(TempWebsite) 'Format the website
+                                        SaveLog("Google thread - Formatted website: " & BusinessWebsite)
+
+                                        If Not CheckDuplicateWebsite(BusinessWebsite) = True Then 'If this website is not in the database, proceed with scraping
+                                            RemoveLeft.Text = "" 'Clear variable
+                                            RemoveRight.Text = "" 'Clear variable
+
+                                            RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
+                                            RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
+                                            BusinessAddress = RemoveRight.Text 'String between is our contact address
+                                            SaveLog("Google thread - Contact address: " & BusinessAddress)
+
+                                            RemoveLeft.Text = "" 'Clear variable
+                                            RemoveRight.Text = "" 'Clear variable
+
+                                            RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
+                                            RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
+                                            BusinessPhone = RemoveRight.Text 'String between is our contact phone
+                                            SaveLog("Google thread - Contact phone: " & BusinessPhone)
+
+                                            ShouldSaveEntry = True 'All good - we can save this contact
+                                        Else
+                                            SaveLog("Google thread - " & BusinessWebsite & " already exists in the database")
+                                        End If
                                     End If
-                                End If
+                                Catch ex As Exception
+                                End Try
+                            Else
+                                SaveLog("Google thread - element xPath: //*[@id='pane']/div/div[1]/div/div/button/span not found")
+                            End If
+                        End If
+
+                        Thread.Sleep(1000) 'Wait for 3+ seconds
+                        SaveLog("Google thread - Waiting for 'Back' button")
+                        If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath", 10) = True Then 'If "Back" button is present...
+                            Try
+                                element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span")) 'Find "Back" button element
+                                element.Click() 'Click on it
+                                SaveLog("Google thread - Clicked on the back button")
                             Catch ex As Exception
+                                SaveLog("Google thread - Exception occured while attempting to click on the 'back' button: " & ex.Message & " - Trying again...")
+                                Thread.Sleep(5000) 'Wait for 5 seconds and try again
+                                element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span")) 'Find "Back" button element
+                                element.Click() 'Click on it
+                                SaveLog("Google thread - Clicked on the back button")
                             End Try
+
+                            SaveLog("Google thread - Formatting data...")
+                            BusinessName = BusinessName.Replace("&amp;", "&") 'Format contact name
+                            If BusinessAddress = "False" Then BusinessAddress = "" 'Format address
+                            If BusinessPhone = "False" Then BusinessPhone = "" 'Format phone
                         Else
                             SaveLog("Google thread - element xPath: //*[@id='pane']/div/div[1]/div/div/button/span not found")
                         End If
-                    End If
-
-                    Thread.Sleep(1000) 'Wait for 3+ seconds
-                    SaveLog("Google thread - Waiting for 'Back' button")
-                    If WaitForElement("//*[@id='pane']/div/div[1]/div/div/button/span", "xPath", 10) = True Then 'If "Back" button is present...
-                        Try
-                            element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span")) 'Find "Back" button element
-                            element.Click() 'Click on it
-                            SaveLog("Google thread - Clicked on the back button")
-                        Catch ex As Exception
-                            SaveLog("Google thread - Exception occured while attempting to click on the 'back' button: " & ex.Message & " - Trying again...")
-                            Thread.Sleep(5000) 'Wait for 5 seconds and try again
-                            element = driver2.FindElement(By.XPath("//*[@id='pane']/div/div[1]/div/div/button/span")) 'Find "Back" button element
-                            element.Click() 'Click on it
-                            SaveLog("Google thread - Clicked on the back button")
-                        End Try
-
-                        SaveLog("Google thread - Formatting data...")
-                        BusinessName = BusinessName.Replace("&amp;", "&") 'Format contact name
-                        If BusinessAddress = "False" Then BusinessAddress = "" 'Format address
-                        If BusinessPhone = "False" Then BusinessPhone = "" 'Format phone
                     Else
-                        SaveLog("Google thread - element xPath: //*[@id='pane']/div/div[1]/div/div/button/span not found")
+                        SaveLog("Google thread - Failed to open contact window - element didn't show up after 15 seconds")
                     End If
                 Else
                     SaveLog("Google thread - Duplicate contact: " & BusinessName)
                 End If
+
 
                 If ShouldSaveEntry = True Then 'If we can save this contact...
                     If IsTownOnTheList(BusinessAddress) = True Then SaveIntoDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") Else SaveIntoOTDatabase(BusinessName, BusinessAddress, BusinessPhone, BusinessWebsite, "GMB") 'Save into adequate database (this splits contacts from towns we're working on from others into different SQL tables)
