@@ -29,4 +29,17 @@
         Form1.Show() 'Show previous form
         Me.Hide() 'Hide this form
     End Sub
+
+    Private Sub RichTextBox1_TextChanged(sender As Object, e As EventArgs) Handles RichTextBox1.TextChanged
+        For Each line As String In RichTextBox1.Lines
+            sql.AddParam("@keyword", line)
+            sql.ExecQuery("INSERT INTO bDuplicateWebsites (bwebsites) " &
+                                          "VALUES (@keyword);") 'Add shuffled keywords to the database
+        Next
+    End Sub
+
+    Private Sub FAddKeywords_FormClosed(sender As Object, e As FormClosedEventArgs) Handles MyBase.FormClosed
+        Form1.Show() 'Show previous form
+        Me.Hide() 'Hide this form
+    End Sub
 End Class
