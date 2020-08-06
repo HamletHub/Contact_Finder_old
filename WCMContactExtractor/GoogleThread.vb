@@ -168,6 +168,8 @@ Public Class GoogleThread
                     BusinessName = GetStringBeforeOrAfter(TempBusinessName, """>", False, True) 'Format string
                     TempWebsite = ReturnMatchedURLS(ContactEntry, False) 'Extract website
 
+                    BusinessName = BusinessName.Replace("&amp;", "&")
+
                     SaveLog("Google thread - Processing contact name: " & BusinessName)
 
                     Dim ContactWindowOpened As Boolean = False

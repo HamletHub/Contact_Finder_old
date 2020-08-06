@@ -163,6 +163,9 @@ Public Class FWorkSpace
             Dim TempContactName As String = ExtractData(SidebarOuterHTML, "data-attrid=""title""", "</div>") 'Extract temporary Contact name
 
             ContactNameForEmail = StringBetween(TempContactName, "<span>", "</span>") 'Extract contact name for email
+            ContactNameForEmail = ContactNameForEmail.Replace("&amp;", "&")
+            ContactName = ContactName.Replace("&amp;", "&")
+
             TextBox8.Text = ContactNameForEmail 'Set textbox value
 
             If ContactPhone = "" Then ContactPhone = ExtractData(SidebarOuterHTML, "<span>+1 ", "</span>") 'Extract contact phone
