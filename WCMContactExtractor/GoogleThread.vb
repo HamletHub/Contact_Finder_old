@@ -220,18 +220,24 @@ Public Class GoogleThread
                                             RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
                                             BusinessAddress = RemoveRight.Text 'String between is our contact address
 
-                                            SaveLog("Google thread - Contact address: " & BusinessAddress)
+                                            If BannedHubs(BusinessAddress) = True Then
+                                                SaveLog("Google thread - Contact address: " & BusinessAddress & "not acceptable")
+                                            Else
+                                                SaveLog("Google thread - Contact address: " & BusinessAddress)
 
-                                            RemoveLeft.Text = "" 'Clear variable
-                                            RemoveRight.Text = "" 'Clear variable
+                                                RemoveLeft.Text = "" 'Clear variable
+                                                RemoveRight.Text = "" 'Clear variable
 
-                                            RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
-                                            RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
-                                            BusinessPhone = RemoveRight.Text 'String between is our contact phone
+                                                RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
+                                                RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
+                                                BusinessPhone = RemoveRight.Text 'String between is our contact phone
 
-                                            SaveLog("Google thread - Contact phone: " & BusinessPhone)
+                                                SaveLog("Google thread - Contact phone: " & BusinessPhone)
 
-                                            ShouldSaveEntry = True 'All good - we can save this contact
+                                                ShouldSaveEntry = True 'All good - we can save this contact
+                                            End If
+
+
                                         Catch ex As Exception
                                         End Try
                                     Else
@@ -269,17 +275,25 @@ Public Class GoogleThread
                                             RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
                                             RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
                                             BusinessAddress = RemoveRight.Text 'String between is our contact address
-                                            SaveLog("Google thread - Contact address: " & BusinessAddress)
 
-                                            RemoveLeft.Text = "" 'Clear variable
-                                            RemoveRight.Text = "" 'Clear variable
+                                            If BannedHubs(BusinessAddress) = True Then
+                                                SaveLog("Google thread - Contact address: " & BusinessAddress & "not acceptable")
+                                            Else
+                                                SaveLog("Google thread - Contact address: " & BusinessAddress)
 
-                                            RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
-                                            RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
-                                            BusinessPhone = RemoveRight.Text 'String between is our contact phone
-                                            SaveLog("Google thread - Contact phone: " & BusinessPhone)
+                                                RemoveLeft.Text = "" 'Clear variable
+                                                RemoveRight.Text = "" 'Clear variable
 
-                                            ShouldSaveEntry = True 'All good - we can save this contact
+                                                RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
+                                                RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
+                                                BusinessPhone = RemoveRight.Text 'String between is our contact phone
+
+                                                SaveLog("Google thread - Contact phone: " & BusinessPhone)
+
+                                                ShouldSaveEntry = True 'All good - we can save this contact
+                                            End If
+
+
                                         Else 'If TempWebsite is not False, that means google provided website for this contact
                                             SaveLog("Google thread - " & BusinessName & " website found: " & TempWebsite)
 
@@ -293,17 +307,24 @@ Public Class GoogleThread
                                                 RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Address: ", False, True) 'Get address string from the left
                                                 RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get address string from the right
                                                 BusinessAddress = RemoveRight.Text 'String between is our contact address
-                                                SaveLog("Google thread - Contact address: " & BusinessAddress)
 
-                                                RemoveLeft.Text = "" 'Clear variable
-                                                RemoveRight.Text = "" 'Clear variable
+                                                If BannedHubs(BusinessAddress) = True Then
+                                                    SaveLog("Google thread - Contact address: " & BusinessAddress & "not acceptable")
+                                                Else
+                                                    SaveLog("Google thread - Contact address: " & BusinessAddress)
 
-                                                RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
-                                                RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
-                                                BusinessPhone = RemoveRight.Text 'String between is our contact phone
-                                                SaveLog("Google thread - Contact phone: " & BusinessPhone)
+                                                    RemoveLeft.Text = "" 'Clear variable
+                                                    RemoveRight.Text = "" 'Clear variable
 
-                                                ShouldSaveEntry = True 'All good - we can save this contact
+                                                    RemoveLeft.Text = GetStringBeforeOrAfter(BusRTB.Text, "Phone: ", False, True) 'Get phone string from the left
+                                                    RemoveRight.Text = GetStringBeforeOrAfter(RemoveLeft.Text, """", True, False) 'Get phone string from the right
+                                                    BusinessPhone = RemoveRight.Text 'String between is our contact phone
+
+                                                    SaveLog("Google thread - Contact phone: " & BusinessPhone)
+
+                                                    ShouldSaveEntry = True 'All good - we can save this contact
+                                                End If
+
                                             Else
                                                 SaveLog("Google thread - " & BusinessWebsite & " already exists in the database")
                                             End If
@@ -459,6 +480,18 @@ Public Class GoogleThread
 #End Region
 
 #Region "Functions"
+    Private Function BannedHubs(ByVal Address As String)
+        'If match URL contains some of these words, discard it
+        Dim BWords As New ArrayList From {
+            "New Milford",
+            "New Fairfield"
+             }
+
+        For Each item As String In BWords
+            If Address.Contains(item) Then Return True
+        Next
+        Return False
+    End Function
     Private Function EnterKeywordOnGoogle(ByVal Keyword As String)
         Dim element As IWebElement 'Declare Chrome iWebElement
         driver2.Navigate.GoToUrl("https://google.com") 'Navigate to google.com
