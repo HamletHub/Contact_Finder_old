@@ -550,6 +550,7 @@ Public Class GoogleThread
     Private Function IsTownOnTheList(ByVal s As String)
         Dim ApprovedHubs As New ArrayList 'City array list'Add town list
         ApprovedHubs.Add("Danbury,")
+        ApprovedHubs.Add("Darien,")
         ApprovedHubs.Add("Fairfield,")
         ApprovedHubs.Add("Milford,")
         ApprovedHubs.Add("New Canaan,")
@@ -564,7 +565,7 @@ Public Class GoogleThread
         BannedHubs.Add("New Milford,")
         'Check if this address contains banned hubs from the list above
         For Each value As String In BannedHubs
-            If s.Contains(value) Then Return True
+            If s.Contains(value) Then Return False
         Next
 
         'Check if this address contains hubs from the list above
@@ -577,6 +578,7 @@ Public Class GoogleThread
         'Check if town is on the list
         Dim CityarrayNew2 As New ArrayList From {
             "danbury",
+            "darien",
             "fairfield",
             "milford",
             "new canaan",
