@@ -187,26 +187,26 @@ Public Class FWorkSpace
                 If matchUrl.Contains("linkedin.com") Then ContactLinkedIn = matchUrl : TextBox7.Text = ContactLinkedIn 'Get LinkedIn link from the sidebar
             Next
 
-            Dim MainBodyOuterHtml As String 'Declare string to store outerHTML of the main body. We use it to get additional social media links
-            element = driver.FindElement(By.XPath("//*[@id='rso']")) 'Find main body xPath
-            MainBodyOuterHtml = element.GetAttribute("outerHTML") 'Get outerHTML of the main body
-            Dim MainBodyLinks As MatchCollection = Regex.Matches(MainBodyOuterHtml, "<a.*?href=""(.*?)"".*?>(.*?)</a>") 'Get all links from the main body outerHTML
-            For Each match As Match In MainBodyLinks 'For each match (link) in the main body outerHTML
-                Dim matchUrl As String = match.Groups(1).Value 'Get URL match
-                If matchUrl.StartsWith("#") Then Continue For 'Ignore all anchor links
-                If matchUrl.ToLower.StartsWith("javascript:") Then Continue For 'Ignore all javascript calls
-                If matchUrl.ToLower.StartsWith("mailto:") Then Continue For 'Ignore all email links
+            'Dim MainBodyOuterHtml As String 'Declare string to store outerHTML of the main body. We use it to get additional social media links
+            'element = driver.FindElement(By.XPath("//*[@id='rso']")) 'Find main body xPath
+            'MainBodyOuterHtml = element.GetAttribute("outerHTML") 'Get outerHTML of the main body
+            'Dim MainBodyLinks As MatchCollection = Regex.Matches(MainBodyOuterHtml, "<a.*?href=""(.*?)"".*?>(.*?)</a>") 'Get all links from the main body outerHTML
+            'For Each match As Match In MainBodyLinks 'For each match (link) in the main body outerHTML
+            '    Dim matchUrl As String = match.Groups(1).Value 'Get URL match
+            '    If matchUrl.StartsWith("#") Then Continue For 'Ignore all anchor links
+            '    If matchUrl.ToLower.StartsWith("javascript:") Then Continue For 'Ignore all javascript calls
+            '    If matchUrl.ToLower.StartsWith("mailto:") Then Continue For 'Ignore all email links
 
-                If matchUrl.Contains("facebook.com") Then ContactFacebook = matchUrl : TextBox5.Text = ContactFacebook 'Get Facebook link from the sidebar
-                If matchUrl.Contains("twitter.com") Then ContactTwitter = matchUrl : TextBox6.Text = ContactTwitter 'Get Twitter link from the sidebar
-                If matchUrl.Contains("instagram.com") Then ContactInstagram = matchUrl : TextBox9.Text = ContactInstagram 'Get Instagram link from the sidebar
-                If matchUrl.Contains("linkedin.com") Then ContactLinkedIn = matchUrl : TextBox7.Text = ContactLinkedIn 'Get LinkedIn link from the sidebar
-            Next
+            '    If matchUrl.Contains("facebook.com") Then ContactFacebook = matchUrl : TextBox5.Text = ContactFacebook 'Get Facebook link from the sidebar
+            '    If matchUrl.Contains("twitter.com") Then ContactTwitter = matchUrl : TextBox6.Text = ContactTwitter 'Get Twitter link from the sidebar
+            '    If matchUrl.Contains("instagram.com") Then ContactInstagram = matchUrl : TextBox9.Text = ContactInstagram 'Get Instagram link from the sidebar
+            '    If matchUrl.Contains("linkedin.com") Then ContactLinkedIn = matchUrl : TextBox7.Text = ContactLinkedIn 'Get LinkedIn link from the sidebar
+            'Next
 
             If Not TextBox3.Text = "" Then 'If textbox with website is not empty...
                 If Not TextBox3.Text.Contains("http") Then 'If website does not contain http, we need to add that to the website
                     Dim TempWB As String = TextBox3.Text
-                    ContactWebsite = "https://" & TempWB 'Add https:// to the website
+                    ContactWebsite = "http://" & TempWB 'Add https:// to the website
                 Else
                     ContactWebsite = TextBox3.Text 'If website contain http, no worries! :)
                 End If
